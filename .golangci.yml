@@ -1,0 +1,49 @@
+run:
+  go: '1.22'
+  timeout: 5m
+  skip-dirs-use-default: true
+
+linters-settings:
+  errcheck:
+    ignore: fmt:.*,Close
+  dupl:
+    threshold: 200
+  funlen:
+    lines: 115
+    statements: 115
+  stylecheck:
+    checks: ['all', '-ST1003']
+
+linters:
+  disable-all: true
+  enable:
+    - dogsled
+    - dupl
+    - errcheck
+    - funlen
+    - gocritic
+    - gofumpt
+    - gosec
+    - gosimple
+    - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - stylecheck
+    - typecheck
+    - unconvert
+    - unused
+    - whitespace
+
+issues:
+  max-same-issues: 0
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - dupl
+        - funlen
+        - gosec
+        - gocritic
+    - text: 'Expect WriteFile permissions to be 0600 or less'
+      linters:
+        - gosec

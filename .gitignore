@@ -1,0 +1,43 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+*.tmp
+
+# Cache
+.cache
+
+# Environment files
+.env*
+!.env.example
+
+# IDE
+.idea/
+.vscode/**
+!.vscode/settings.json
+
+# Go
+*.test
+go.work
+
+# Coverage
+cover.*
+*.out
+
+# Build output
+build/
+dist/
+
+# Misc
+*~
+.DS_Store
+*.pem
