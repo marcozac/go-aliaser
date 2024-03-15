@@ -1,13 +1,55 @@
 package aliaser
 
 import (
+	"bytes"
 	"context"
+	"embed"
 	"errors"
 	"fmt"
 	"go/types"
+	"io"
+	"os"
+	"text/template"
 
 	"golang.org/x/tools/go/packages"
+	"golang.org/x/tools/imports"
 )
+
+//go:embed template/*
+var tmplFS embed.FS
+
+// Generate generates the aliases for the given [Alias.Src] and writes them to
+// the file at [Alias.Out].
+func Generate(a *Alias) error {
+	var buf bytes.Buffer
+	if err := generate(a, &buf); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(a.Out, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o644)
+	if err != nil {
+		return fmt.Errorf("open file: %w", err)
+	}
+	defer f.Close()
+	data, err := imports.Process("", buf.Bytes(), nil)
+	if err != nil {
+		return fmt.Errorf("format file: %w", err)
+	}
+	if _, err := f.Write(data); err != nil {
+		return fmt.Errorf("write file: %w", err)
+	}
+	return nil
+}
+
+func generate(a *Alias, w io.Writer) error {
+	tmpl, err := template.ParseFS(tmplFS, "template/*.tmpl")
+	if err != nil {
+		return fmt.Errorf("parse template: %w", err)
+	}
+	if err := tmpl.ExecuteTemplate(w, "alias", a); err != nil {
+		return fmt.Errorf("execute template: %w", err)
+	}
+	return nil
+}
 
 // Load loads the package at the given path and returns a [Src] with the
 // package's exported constants, variables, functions, and types.
@@ -18,6 +60,10 @@ func Load(from string, opts ...Option) (*Src, error) {
 		return nil, errors.New("empty package path")
 	}
 	c := applyOptions(nil, opts...)
+	return load(c, from)
+}
+
+func load(c *config, from string) (*Src, error) {
 	pkgs, err := packages.Load(&packages.Config{
 		Mode:    packages.NeedName | packages.NeedTypes,
 		Context: c.Context,
@@ -53,6 +99,21 @@ func Load(from string, opts ...Option) (*Src, error) {
 		}
 	}
 	return p, nil
+}
+
+type Alias struct {
+	// PkgName is the name of the package where the aliases will be
+	// generated.
+	PkgName string
+
+	// Out is the file path where the aliases will be written.
+	Out string
+
+	// Src is the loaded package to generate aliases for.
+	Src *Src
+
+	// Header is an optional header to be written at the top of the file.
+	Header string
 }
 
 // Src represents a loaded package.

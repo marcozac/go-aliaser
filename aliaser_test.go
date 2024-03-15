@@ -1,3 +1,5 @@
+//go:build !testout
+
 package aliaser
 
 import (
@@ -19,4 +21,19 @@ func TestLoad(t *testing.T) {
 
 	_, err = Load("")
 	assert.Error(t, err, "expected error for empty path")
+}
+
+func TestGenerate(t *testing.T) {
+	t.Run("OK", func(t *testing.T) {
+		src, err := Load("github.com/marcozac/go-aliaser/internal/testdata")
+		assert.NoError(t, err)
+		require.NotNil(t, src)
+		a := &Alias{
+			PkgName: "testout",
+			Out:     "internal/testout/alias.go",
+			Src:     src,
+			Header:  "//go:build testout",
+		}
+		assert.NoError(t, Generate(a))
+	})
 }

@@ -1,0 +1,15 @@
+{{ define "base" }}
+{{- with $.Header }}{{ . }}{{ end }}
+
+package {{ $.PkgName }}
+
+import "{{ $.Src.PkgPath }}"
+{{- end }}
+
+{{ define "alias" }}
+{{- template "base" $ }}
+{{ with $.Src.Constants }}{{ template "constants" . }}{{ end }}
+{{ with $.Src.Variables }}{{ template "variables" . }}{{ end }}
+{{ with $.Src.Functions }}{{ template "functions" . }}{{ end }}
+{{ with $.Src.Types }}{{ template "types" . }}{{ end }}
+{{ end }}
