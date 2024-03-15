@@ -110,6 +110,7 @@ func TestGenerate(t *testing.T) {
 		assert.NoError(t, Generate(a))
 	})
 	t.Run("Error", func(t *testing.T) {
+		dir := t.TempDir()
 		t.Run("ParseTemplate", func(t *testing.T) {
 			exTmplFS := tmplFS
 			tmplFS = embed.FS{}
@@ -118,42 +119,55 @@ func TestGenerate(t *testing.T) {
 			assert.Error(t, err, "parse template")
 			t.Logf("parse template error: %v", err)
 		})
-
-		err := Generate(&Alias{})
-		assert.Error(t, err, "execute template")
-		t.Logf("execute template error: %v", err)
-
-		err = Generate(&Alias{
-			PkgName: "testout",
-			Out:     "non-existent-dir/alias.go",
-			Src: &Src{
-				PkgPath: "github.com/marcozac/go-aliaser/internal/testdata",
-			},
+		t.Run("ExecuteTemplate", func(t *testing.T) {
+			err := Generate(&Alias{})
+			assert.Error(t, err, "execute template")
+			t.Logf("execute template error: %v", err)
 		})
-		assert.Error(t, err, "open file")
-		t.Logf("open file error: %v", err)
-
+		t.Run("OpenFile", func(t *testing.T) {
+			err := Generate(&Alias{
+				PkgName: "testout",
+				Out:     "non-existent-dir/alias.go",
+				Src: &Src{
+					PkgPath: "github.com/marcozac/go-aliaser/internal/testdata",
+				},
+			})
+			assert.Error(t, err, "open file")
+			t.Logf("open file error: %v", err)
+		})
 		t.Run("ImportProcess", func(t *testing.T) {
 			src, err := Load("github.com/marcozac/go-aliaser/internal/testdata")
 			assert.NoError(t, err)
 			require.NotNil(t, src)
-
-			// Change the first constant to have an invalid name
-			c0 := src.Constants[0]
+			c0 := src.Constants[0] // Change the first constant to have an invalid name
 			src.Constants[0] = types.NewConst(c0.Pos(), c0.Pkg(), c0.Name()+".", c0.Type(), c0.Val())
-
-			dir := t.TempDir()
-			f, err := os.CreateTemp(dir, "alias-*.go")
-			require.NoError(t, err)
-			f.Close()
-
 			err = Generate(&Alias{
 				PkgName: "testout",
-				Out:     f.Name(),
 				Src:     src,
 			})
 			assert.Error(t, err, "import process")
 			t.Logf("import process error: %v", err)
 		})
+		t.Run("Write", func(t *testing.T) {
+			src, err := Load("github.com/marcozac/go-aliaser/internal/testdata")
+			assert.NoError(t, err)
+			require.NotNil(t, src)
+			f, err := os.CreateTemp(dir, "alias-*.go")
+			require.NoError(t, err)
+			f.Close()
+			err = Generate(&Alias{
+				PkgName: "testout",
+				Out:     f.Name(),
+				Src:     src,
+			}, WithWriter(writerE{}))
+			assert.Error(t, err, "write")
+			t.Logf("write error: %v", err)
+		})
 	})
+}
+
+type writerE struct{}
+
+func (writerE) Write(p []byte) (n int, err error) {
+	return 0, assert.AnError
 }

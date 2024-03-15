@@ -17,23 +17,29 @@ import (
 //go:embed template/*
 var tmplFS embed.FS
 
-// Generate generates the aliases for the given [Alias.Src] and writes them to
-// the file at [Alias.Out].
-func Generate(a *Alias) error {
+// Generate generates the aliases for the given [Alias.Src].
+// By default, it writes the aliases to the file at [Alias.Out], but it is
+// possible to override this behavior by providing a custom writer using the
+// [WithWriter] option. In this case, the file at [Alias.Out] will be ignored.
+func Generate(a *Alias, opts ...Option) error {
+	c := applyOptions(nil, opts...)
 	var buf bytes.Buffer
 	if err := generate(a, &buf); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(a.Out, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o644)
-	if err != nil {
-		return fmt.Errorf("open file: %w", err)
-	}
-	defer f.Close()
 	data, err := imports.Process("", buf.Bytes(), nil)
 	if err != nil {
 		return fmt.Errorf("format file: %w", err)
 	}
-	if _, err := f.Write(data); err != nil {
+	if c.writer == nil {
+		f, err := os.OpenFile(a.Out, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o644)
+		if err != nil {
+			return fmt.Errorf("open file: %w", err)
+		}
+		defer f.Close()
+		c.writer = f
+	}
+	if _, err := c.writer.Write(data); err != nil {
 		return fmt.Errorf("write file: %w", err)
 	}
 	return nil
@@ -158,6 +164,7 @@ type Option func(*config)
 
 type config struct {
 	ctx              context.Context
+	writer           io.Writer
 	excludeConstants bool
 	excludeVariables bool
 	excludeFunctions bool
@@ -169,6 +176,13 @@ type config struct {
 func WithContext(ctx context.Context) Option {
 	return func(c *config) {
 		c.ctx = ctx
+	}
+}
+
+// WithWriter sets the writer to be used when generating the aliases.
+func WithWriter(w io.Writer) Option {
+	return func(c *config) {
+		c.writer = w
 	}
 }
 
