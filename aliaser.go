@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"embed"
-	"errors"
 	"fmt"
 	"go/types"
 	"io"
@@ -51,19 +50,34 @@ func generate(a *Alias, w io.Writer) error {
 	return nil
 }
 
+type Alias struct {
+	// PkgName is the name of the package where the aliases will be
+	// generated.
+	PkgName string
+
+	// Out is the file path where the aliases will be written.
+	Out string
+
+	// Src is the loaded package to generate aliases for.
+	Src *Src
+
+	// Header is an optional header to be written at the top of the file.
+	Header string
+}
+
 // Load loads the package at the given path and returns a [Src] with the
 // package's exported constants, variables, functions, and types.
 //
 // The path must be in Go format, e.g. "github.com/marcozac/go-aliaser/internal/testdata".
 func Load(from string, opts ...Option) (*Src, error) {
-	if from == "" {
-		return nil, errors.New("empty package path")
-	}
 	c := applyOptions(nil, opts...)
 	return load(c, from)
 }
 
 func load(c *config, from string) (*Src, error) {
+	if from == "" {
+		return nil, ErrEmptyPath
+	}
 	pkgs, err := packages.Load(&packages.Config{
 		Mode:    packages.NeedName | packages.NeedTypes,
 		Context: c.Context,
@@ -75,6 +89,9 @@ func load(c *config, from string) (*Src, error) {
 		return nil, fmt.Errorf("expected one package, got %d", len(pkgs))
 	}
 	lp := pkgs[0]
+	if errs := lp.Errors; len(errs) > 0 {
+		return nil, fmt.Errorf("load package errors: %w", PackagesErrors(errs))
+	}
 	p := &Src{
 		PkgName: lp.Name,
 		PkgPath: lp.PkgPath,
@@ -94,26 +111,11 @@ func load(c *config, from string) (*Src, error) {
 			p.Functions = append(p.Functions, o)
 		case *types.TypeName:
 			p.Types = append(p.Types, o)
-		default:
-			return nil, fmt.Errorf("unexpected object type for %s: %T", o.Name(), o)
+		default: // should never happen
+			// return nil, fmt.Errorf("unexpected object type for %s: %T", o.Name(), o)
 		}
 	}
 	return p, nil
-}
-
-type Alias struct {
-	// PkgName is the name of the package where the aliases will be
-	// generated.
-	PkgName string
-
-	// Out is the file path where the aliases will be written.
-	Out string
-
-	// Src is the loaded package to generate aliases for.
-	Src *Src
-
-	// Header is an optional header to be written at the top of the file.
-	Header string
 }
 
 // Src represents a loaded package.
