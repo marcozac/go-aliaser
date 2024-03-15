@@ -80,7 +80,7 @@ func load(c *config, from string) (*Src, error) {
 	}
 	pkgs, err := packages.Load(&packages.Config{
 		Mode:    packages.NeedName | packages.NeedTypes,
-		Context: c.Context,
+		Context: c.ctx,
 	}, from)
 	if err != nil {
 		return nil, fmt.Errorf("load package: %w", err)
@@ -102,15 +102,26 @@ func load(c *config, from string) (*Src, error) {
 		if !o.Exported() {
 			continue
 		}
+		if _, ok := c.excludedNames[o.Name()]; ok {
+			continue
+		}
 		switch o := o.(type) {
 		case *types.Const:
-			p.Constants = append(p.Constants, o)
+			if !c.excludeConstants {
+				p.Constants = append(p.Constants, o)
+			}
 		case *types.Var:
-			p.Variables = append(p.Variables, o)
+			if !c.excludeVariables {
+				p.Variables = append(p.Variables, o)
+			}
 		case *types.Func:
-			p.Functions = append(p.Functions, o)
+			if !c.excludeFunctions {
+				p.Functions = append(p.Functions, o)
+			}
 		case *types.TypeName:
-			p.Types = append(p.Types, o)
+			if !c.excludeTypes {
+				p.Types = append(p.Types, o)
+			}
 		default: // should never happen
 			// return nil, fmt.Errorf("unexpected object type for %s: %T", o.Name(), o)
 		}
@@ -146,12 +157,60 @@ type Src struct {
 type Option func(*config)
 
 type config struct {
-	Context context.Context
+	ctx              context.Context
+	excludeConstants bool
+	excludeVariables bool
+	excludeFunctions bool
+	excludeTypes     bool
+	excludedNames    map[string]struct{}
 }
 
+// WithContext sets the context to be used when loading the package.
 func WithContext(ctx context.Context) Option {
 	return func(c *config) {
-		c.Context = ctx
+		c.ctx = ctx
+	}
+}
+
+// ExcludeConstants excludes the constants from the loaded package.
+func ExcludeConstants() Option {
+	return func(c *config) {
+		c.excludeConstants = true
+	}
+}
+
+// ExcludeVariables excludes the variables from the loaded package.
+func ExcludeVariables() Option {
+	return func(c *config) {
+		c.excludeVariables = true
+	}
+}
+
+// ExcludeFunctions excludes the functions from the loaded package.
+func ExcludeFunctions() Option {
+	return func(c *config) {
+		c.excludeFunctions = true
+	}
+}
+
+// ExcludeTypes excludes the types from the loaded package.
+func ExcludeTypes() Option {
+	return func(c *config) {
+		c.excludeTypes = true
+	}
+}
+
+// ExcludeNames excludes the given names from the loaded package. Each name
+// is valid for all kinds of objects (constants, variables, functions, and
+// types).
+//
+// For example, if the loaded package has a constant named "A" and a type
+// named "B", ExcludeNames("A", "B") will exclude both "A" and "B".
+func ExcludeNames(names ...string) Option {
+	return func(c *config) {
+		for _, n := range names {
+			c.excludedNames[n] = struct{}{}
+		}
 	}
 }
 
@@ -167,6 +226,7 @@ func applyOptions(c *config, opts ...Option) *config {
 
 func defaultconfig() *config {
 	return &config{
-		Context: context.Background(),
+		ctx:           context.Background(),
+		excludedNames: make(map[string]struct{}),
 	}
 }

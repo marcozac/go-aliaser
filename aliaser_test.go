@@ -14,19 +14,63 @@ import (
 )
 
 func TestLoad(t *testing.T) {
-	src, err := Load("github.com/marcozac/go-aliaser/internal/testdata",
-		WithContext(context.Background()), // cover WithContext
-	)
-	assert.NoError(t, err)
-	require.NotNil(t, src)
+	t.Run("All", func(t *testing.T) {
+		src, err := Load("github.com/marcozac/go-aliaser/internal/testdata")
+		assert.NoError(t, err)
+		require.NotNil(t, src)
 
-	assert.Greater(t, len(src.Constants), 0)
-	assert.Greater(t, len(src.Variables), 0)
-	assert.Greater(t, len(src.Functions), 0)
-	assert.Greater(t, len(src.Types), 0)
-
+		assert.Greater(t, len(src.Constants), 0)
+		assert.Greater(t, len(src.Variables), 0)
+		assert.Greater(t, len(src.Functions), 0)
+		assert.Greater(t, len(src.Types), 0)
+	})
+	t.Run("Options", func(t *testing.T) {
+		t.Run("WithContext", func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			c := applyOptions(nil, WithContext(ctx))
+			_, err := load(c, "github.com/marcozac/go-aliaser/internal/testdata")
+			assert.Error(t, err, "context canceled")
+			t.Logf("context canceled error: %v", err)
+		})
+		t.Run("ExcludeConstants", func(t *testing.T) {
+			src, err := Load("github.com/marcozac/go-aliaser/internal/testdata", ExcludeConstants())
+			assert.NoError(t, err)
+			require.NotNil(t, src)
+			assert.Empty(t, src.Constants)
+		})
+		t.Run("ExcludeVariables", func(t *testing.T) {
+			src, err := Load("github.com/marcozac/go-aliaser/internal/testdata", ExcludeVariables())
+			assert.NoError(t, err)
+			require.NotNil(t, src)
+			assert.Empty(t, src.Variables)
+		})
+		t.Run("ExcludeFunctions", func(t *testing.T) {
+			src, err := Load("github.com/marcozac/go-aliaser/internal/testdata", ExcludeFunctions())
+			assert.NoError(t, err)
+			require.NotNil(t, src)
+			assert.Empty(t, src.Functions)
+		})
+		t.Run("ExcludeTypes", func(t *testing.T) {
+			src, err := Load("github.com/marcozac/go-aliaser/internal/testdata", ExcludeTypes())
+			assert.NoError(t, err)
+			require.NotNil(t, src)
+			assert.Empty(t, src.Types)
+		})
+		t.Run("ExcludeNames", func(t *testing.T) {
+			src, err := Load("github.com/marcozac/go-aliaser/internal/testdata", ExcludeNames("A", "D"))
+			assert.NoError(t, err)
+			require.NotNil(t, src)
+			for _, c := range src.Constants {
+				assert.NotEqual(t, "A", c.Name())
+			}
+			for _, typ := range src.Types {
+				assert.NotEqual(t, "D", typ.Name())
+			}
+		})
+	})
 	t.Run("Error", func(t *testing.T) {
-		_, err = Load("")
+		_, err := Load("")
 		assert.Error(t, err, "empty path")
 		t.Logf("empty path error: %v", err)
 
