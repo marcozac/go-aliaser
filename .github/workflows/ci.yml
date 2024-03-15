@@ -1,0 +1,52 @@
+name: CI
+on:
+  push:
+    branches:
+      - 'main'
+    paths-ignore:
+      - '**.md'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: false
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+      - name: Test
+        run: >-
+          go test -v -race
+          -covermode=atomic
+          -coverprofile=coverage.out
+          -coverpkg=./...
+          ./...
+      # The tests above generate a go package with build tag "testout"
+      # This step runs the tests with that build tag to check the generated code
+      - name: Test Generated Aliases
+        run: go test -v -race -tags=testout ./...
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: marcozac/go-aliaser
