@@ -8,6 +8,7 @@ import (
 	"go/types"
 	"io"
 	"os"
+	"path/filepath"
 	"text/template"
 
 	"golang.org/x/tools/go/packages"
@@ -32,6 +33,9 @@ func Generate(a *Alias, opts ...Option) error {
 		return fmt.Errorf("format file: %w", err)
 	}
 	if c.writer == nil {
+		if err := os.MkdirAll(filepath.Dir(a.Out), 0o755); err != nil {
+			return fmt.Errorf("create directory: %w", err)
+		}
 		f, err := os.OpenFile(a.Out, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o644)
 		if err != nil {
 			return fmt.Errorf("open file: %w", err)

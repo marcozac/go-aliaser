@@ -6,7 +6,9 @@ import (
 	"context"
 	"embed"
 	"go/types"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -97,20 +99,32 @@ func TestLoad(t *testing.T) {
 }
 
 func TestGenerate(t *testing.T) {
+	tempDir := t.TempDir()
+	nwDir := filepath.Join(tempDir, "non-writable-dir")
+	require.NoError(t, os.Mkdir(nwDir, 0o555))
 	t.Run("OK", func(t *testing.T) {
 		src, err := Load("github.com/marcozac/go-aliaser/internal/testdata")
 		assert.NoError(t, err)
 		require.NotNil(t, src)
-		a := &Alias{
+		assert.NoError(t, Generate(&Alias{
 			PkgName: "testout",
 			Out:     "internal/testout/alias.go",
 			Src:     src,
 			Header:  "//go:build testout",
-		}
-		assert.NoError(t, Generate(a))
+		}))
+		t.Run("Mkdir", func(t *testing.T) {
+			// Write in a non-existent tempDir subdirectory
+			fp := filepath.Join(tempDir, "testout/alias.go")
+			require.NoDirExists(t, filepath.Dir(fp))
+			assert.NoError(t, Generate(&Alias{
+				PkgName: "testout",
+				Out:     fp,
+				Src:     src,
+				Header:  "//go:build testout",
+			}))
+		})
 	})
 	t.Run("Error", func(t *testing.T) {
-		dir := t.TempDir()
 		t.Run("ParseTemplate", func(t *testing.T) {
 			exTmplFS := tmplFS
 			tmplFS = embed.FS{}
@@ -123,17 +137,6 @@ func TestGenerate(t *testing.T) {
 			err := Generate(&Alias{})
 			assert.Error(t, err, "execute template")
 			t.Logf("execute template error: %v", err)
-		})
-		t.Run("OpenFile", func(t *testing.T) {
-			err := Generate(&Alias{
-				PkgName: "testout",
-				Out:     "non-existent-dir/alias.go",
-				Src: &Src{
-					PkgPath: "github.com/marcozac/go-aliaser/internal/testdata",
-				},
-			})
-			assert.Error(t, err, "open file")
-			t.Logf("open file error: %v", err)
 		})
 		t.Run("ImportProcess", func(t *testing.T) {
 			src, err := Load("github.com/marcozac/go-aliaser/internal/testdata")
@@ -148,11 +151,35 @@ func TestGenerate(t *testing.T) {
 			assert.Error(t, err, "import process")
 			t.Logf("import process error: %v", err)
 		})
+		t.Run("Mkdir", func(t *testing.T) {
+			src, err := Load("github.com/marcozac/go-aliaser/internal/testdata")
+			assert.NoError(t, err)
+			require.NotNil(t, src)
+			err = Generate(&Alias{
+				PkgName: "testout",
+				Out:     filepath.Join(nwDir, "testout/alias.go"),
+				Src:     src,
+				Header:  "//go:build testout",
+			})
+			assert.ErrorIs(t, err, fs.ErrPermission, "mkdir")
+			t.Logf("mkdir error: %v", err)
+		})
+		t.Run("OpenFile", func(t *testing.T) {
+			err := Generate(&Alias{
+				PkgName: "testout",
+				Out:     filepath.Join(nwDir, "alias.go"),
+				Src: &Src{
+					PkgPath: "github.com/marcozac/go-aliaser/internal/testdata",
+				},
+			})
+			assert.ErrorIs(t, err, fs.ErrPermission)
+			t.Logf("open file error: %v", err)
+		})
 		t.Run("Write", func(t *testing.T) {
 			src, err := Load("github.com/marcozac/go-aliaser/internal/testdata")
 			assert.NoError(t, err)
 			require.NotNil(t, src)
-			f, err := os.CreateTemp(dir, "alias-*.go")
+			f, err := os.CreateTemp(tempDir, "alias-*.go")
 			require.NoError(t, err)
 			f.Close()
 			err = Generate(&Alias{
