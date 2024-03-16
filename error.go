@@ -7,8 +7,13 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// ErrEmptyPath is returned when the given path is empty.
-var ErrEmptyPath = errors.New("empty path")
+var (
+	// ErrEmptyTarget is returned when the given target is empty.
+	ErrEmptyTarget = errors.New("empty target")
+
+	// ErrEmptyPattern is returned when the given pattern is empty.
+	ErrEmptyPattern = errors.New("empty pattern")
+)
 
 // PackagesErrors is a slice of [packages.Error] as returned by
 // [packages.Load] that implements the error interface.

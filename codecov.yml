@@ -1,0 +1,4 @@
+ignore:
+  - 'internal/testing/pkg'
+  - 'internal/testing/out'
+  - 'cmd/aliaser/main.go'

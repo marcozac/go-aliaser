@@ -29,27 +29,28 @@ go get github.com/marcozac/go-aliaser
 
 To use aliaser in your project, follow these steps:
 
-1. Load a Package: Start by loading the package you want to alias.
+1. Create an Aliaser: Start by creating a new `aliaser.Aliaser` with the target
+   package name and the pattern of the package you want to alias.
 
 ```go
 import "github.com/marcozac/go-aliaser"
 
-src, err := aliaser.Load("github.com/example/package")
+a, err := aliaser.New("mypkg", "github.com/example/package")
 if err != nil {
   // ...
 }
 ```
 
-2. Generate Aliases: With the package loaded, generate the aliases.
+2. Generate Aliases: With the `Aliaser` created, you can generate the aliases
+   writing them to a `io.Writer` or to directly to a file.
 
 ```go
-err = aliaser.Generate(&aliaser.Alias{
-    PkgName: "myalias",
-    Out:     "path/to/output/file.go",
-    Src:     src,
-})
-if err != nil {
-    log.Fatalf("Error generating aliases: %v", err)
+if err := a.Generate(io.Discard); err != nil {
+  // ...
+}
+
+if err := a.GenerateFile("mypkg/alias.go"); err != nil {
+  // ...
 }
 ```
 
@@ -69,6 +70,11 @@ aliaser generate \
   --package "myalias" \
   --file "path/to/output/file.go"
 ```
+
+## Examples
+
+For simple, but more detailed examples of how to use the `aliaser` library and
+CLI, see the [examples](/examples) directory.
 
 ## Contributing
 
