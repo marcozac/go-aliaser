@@ -1,0 +1,30 @@
+{{ define "objects" }}
+{{- range $c := $ }}
+	{{ $c.Name }} = {{ $c.Pkg.Name }}.{{ $c.Name }}
+{{- end }}
+{{- end }}
+
+{{ define "constants" }}
+const (
+	{{- template "objects" . }}
+)
+{{- end }}
+
+{{ define "variables" }}
+var (
+	{{- template "objects" . }}
+)
+{{- end }}
+
+{{ define "functions" }}
+// Functions
+var (
+	{{- template "objects" . }}
+)
+{{- end }}
+
+{{ define "types" }}
+type (
+	{{- template "objects" . }}
+)
+{{- end }}
