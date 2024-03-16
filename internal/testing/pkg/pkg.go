@@ -1,4 +1,6 @@
-package testdata
+//go:build !codeanalysis
+
+package pkg
 
 const (
 	A = 1

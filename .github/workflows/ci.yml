@@ -44,7 +44,7 @@ jobs:
       # The tests above generate a go package with build tag "testout"
       # This step runs the tests with that build tag to check the generated code
       - name: Test Generated Aliases
-        run: go test -v -race -tags=testout ./...
+        run: go test -v -race -tags=testout ./internal/testing/out
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v4
         with:
