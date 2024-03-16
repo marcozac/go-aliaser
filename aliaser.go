@@ -74,7 +74,9 @@ type Alias struct {
 // Load loads the package at the given path and returns a [Src] with the
 // package's exported constants, variables, functions, and types.
 //
-// The path must be in Go format, e.g. "github.com/marcozac/go-aliaser/internal/testdata".
+// The path must be a valid, importable, package path in Go format, e.g.
+// "github.com/marcozac/go-aliaser/internal/testdata". If it is not included
+// in the module's dependencies, run `go get` before calling this function.
 func Load(from string, opts ...Option) (*Src, error) {
 	c := applyOptions(nil, opts...)
 	return load(c, from)
