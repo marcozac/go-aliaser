@@ -4,7 +4,7 @@
 package {{ $.TargetPackage }}
 
 import (
-{{ range $path, $alias := $.Imports }}
+{{ range $path, $alias := $.AliasedImports }}
 	{{ $alias }} "{{ $path }}"
 {{ end }}
 )

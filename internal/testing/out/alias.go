@@ -21,6 +21,7 @@ var (
 // Functions
 var (
 	C = pkg.C
+	J = pkg.J
 )
 
 type (

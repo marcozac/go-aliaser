@@ -133,8 +133,8 @@ func (a *Aliaser) load(c *Config) error {
 
 func (a *Aliaser) setAlias(c *Config, pkg *packages.Package) error {
 	a.alias = &Alias{
-		Config:  c,
-		imports: make(map[string]*types.Package),
+		Config:   c,
+		Importer: NewImporter(),
 	}
 	a.alias.AddImport(pkg.Types)
 	scope := pkg.Types.Scope()

@@ -26,7 +26,7 @@ func TestAlias(t *testing.T) {
 			pkg := types.NewPackage(path, name)
 			alias.AddImport(pkg)
 		}
-		imports := alias.Imports()
+		imports := alias.AliasedImports()
 		l := len(imports)
 		assert.GreaterOrEqual(t, l, 3)
 		require.Contains(t, imports, pkgPath1)
