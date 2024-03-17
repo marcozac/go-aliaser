@@ -93,8 +93,8 @@ func (imp *Importer) importsList() []*types.Package {
 //	// "github.com/marcozac/go-aliaser/fake2" => "fake_2"
 //	// "github.com/marcozac/go-aliaser/fake3" => "fake_3"
 func (imp *Importer) AliasedImports() map[string]string {
-	imp.mu.RLock()
-	defer imp.mu.RUnlock()
+	imp.mu.Lock()
+	defer imp.mu.Unlock()
 	return imp.aliasImports()
 }
 
