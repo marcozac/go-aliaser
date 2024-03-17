@@ -3,7 +3,11 @@
 
 package {{ $.TargetPackage }}
 
-import "{{ $.SrcPkgPath }}"
+import (
+{{ range $path, $alias := $.Imports }}
+	{{ $alias }} "{{ $path }}"
+{{ end }}
+)
 {{- end }}
 
 {{ define "alias" }}

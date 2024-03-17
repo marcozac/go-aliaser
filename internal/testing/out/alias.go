@@ -4,7 +4,9 @@
 
 package out
 
-import "github.com/marcozac/go-aliaser/internal/testing/pkg"
+import (
+	pkg "github.com/marcozac/go-aliaser/internal/testing/pkg"
+)
 
 const (
 	A = pkg.A
