@@ -149,19 +149,19 @@ func (a *Aliaser) setAlias(c *Config, pkg *packages.Package) error {
 		switch o := o.(type) {
 		case *types.Const:
 			if !c.excludeConstants {
-				a.alias.Constants = append(a.alias.Constants, o)
+				a.alias.AddConstants(o)
 			}
 		case *types.Var:
 			if !c.excludeVariables {
-				a.alias.Variables = append(a.alias.Variables, o)
+				a.alias.AddVariables(o)
 			}
 		case *types.Func:
 			if !c.excludeFunctions {
-				a.alias.Functions = append(a.alias.Functions, o)
+				a.alias.AddFunctions(o)
 			}
 		case *types.TypeName:
 			if !c.excludeTypes {
-				a.alias.Types = append(a.alias.Types, o)
+				a.alias.AddTypes(o)
 			}
 		default: // should never happen
 			return fmt.Errorf("unexpected object type for %s: %T", o.Name(), o)

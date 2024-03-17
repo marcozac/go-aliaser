@@ -13,16 +13,6 @@ import (
 type Alias struct {
 	*Config
 
-	// SrcPkgName is the name of the loaded package.
-	//
-	// Example: "pkg"
-	// SrcPkgName string
-
-	// SrcPkgPath is the path of the loaded package.
-	//
-	// Example: "github.com/marcozac/go-aliaser/internal/testing/pkg"
-	// SrcPkgPath string
-
 	// Constants is the list of exported constants in the loaded package.
 	Constants []*types.Const
 
@@ -39,6 +29,66 @@ type Alias struct {
 	imports map[string]*types.Package
 
 	mu sync.RWMutex
+}
+
+// AddConstants adds the given constants to the list of the constants to
+// generate aliases for.
+func (a *Alias) AddConstants(cs ...*types.Const) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, c := range cs {
+		a.addConstant(c)
+	}
+}
+
+func (a *Alias) addConstant(c *types.Const) {
+	a.Constants = append(a.Constants, c)
+	a.addImport(c.Pkg())
+}
+
+// AddVariables adds the given variables to the list of the variables to
+// generate aliases for.
+func (a *Alias) AddVariables(cs ...*types.Var) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, c := range cs {
+		a.addVariable(c)
+	}
+}
+
+func (a *Alias) addVariable(c *types.Var) {
+	a.Variables = append(a.Variables, c)
+	a.addImport(c.Pkg())
+}
+
+// AddFunctions adds the given functions to the list of the functions to
+// generate aliases for.
+func (a *Alias) AddFunctions(cs ...*types.Func) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, c := range cs {
+		a.addFunction(c)
+	}
+}
+
+func (a *Alias) addFunction(c *types.Func) {
+	a.Functions = append(a.Functions, c)
+	a.addImport(c.Pkg())
+}
+
+// AddTypes adds the given types to the list of the types to generate aliases
+// for.
+func (a *Alias) AddTypes(cs ...*types.TypeName) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, c := range cs {
+		a.addType(c)
+	}
+}
+
+func (a *Alias) addType(c *types.TypeName) {
+	a.Types = append(a.Types, c)
+	a.addImport(c.Pkg())
 }
 
 // AddImport adds the given package to the list of imports.
