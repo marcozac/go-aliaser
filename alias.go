@@ -3,6 +3,8 @@ package aliaser
 import (
 	"go/types"
 	"sync"
+
+	"github.com/marcozac/go-aliaser/importer"
 )
 
 // Alias is the type used as the data for the template execution. It contains
@@ -10,7 +12,7 @@ import (
 // exported constants, variables, functions, and types in the loaded package.
 type Alias struct {
 	*Config
-	*Importer
+	*importer.Importer
 
 	// Constants is the list of exported constants in the loaded package.
 	Constants []*types.Const
@@ -38,7 +40,7 @@ func (a *Alias) AddConstants(cs ...*types.Const) {
 }
 
 func (a *Alias) addConstant(c *types.Const) {
-	a.addImport(c.Pkg())
+	a.AddImport(c.Pkg())
 	a.Constants = append(a.Constants, c)
 }
 
@@ -53,7 +55,7 @@ func (a *Alias) AddVariables(vs ...*types.Var) {
 }
 
 func (a *Alias) addVariable(v *types.Var) {
-	a.addImport(v.Pkg())
+	a.AddImport(v.Pkg())
 	a.Variables = append(a.Variables, v)
 }
 
@@ -68,7 +70,7 @@ func (a *Alias) AddFunctions(fns ...*types.Func) {
 }
 
 func (a *Alias) addFunction(fn *types.Func) {
-	a.addImport(fn.Pkg())
+	a.AddImport(fn.Pkg())
 	a.Functions = append(a.Functions, fn)
 }
 
@@ -83,6 +85,6 @@ func (a *Alias) AddTypes(ts ...*types.TypeName) {
 }
 
 func (a *Alias) addType(t *types.TypeName) {
-	a.addImport(t.Pkg())
+	a.AddImport(t.Pkg())
 	a.Types = append(a.Types, t)
 }

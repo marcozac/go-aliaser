@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"text/template"
 
+	"github.com/marcozac/go-aliaser/importer"
 	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/imports"
 )
@@ -134,7 +135,7 @@ func (a *Aliaser) load(c *Config) error {
 func (a *Aliaser) setAlias(c *Config, pkg *packages.Package) error {
 	a.alias = &Alias{
 		Config:   c,
-		Importer: NewImporter(),
+		Importer: importer.New(),
 	}
 	a.alias.AddImport(pkg.Types)
 	scope := pkg.Types.Scope()

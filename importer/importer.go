@@ -1,4 +1,4 @@
-package aliaser
+package importer
 
 import (
 	"fmt"
@@ -7,8 +7,8 @@ import (
 	"sync"
 )
 
-// NewImporter returns a new [Importer].
-func NewImporter() *Importer {
+// New returns a new [Importer].
+func New() *Importer {
 	return &Importer{imports: make(map[string]*types.Package)}
 }
 
@@ -19,9 +19,10 @@ func NewImporter() *Importer {
 // All exported methods are safe for concurrent use.
 type Importer struct {
 	// imports is the map of package imports formatted as "path:Package"
-	imports map[string]*types.Package
-
-	mu sync.RWMutex
+	imports        map[string]*types.Package
+	toAlias        bool
+	aliasedImports map[string]string
+	mu             sync.RWMutex
 }
 
 // AddImport adds the given package to the list of imports ensuring that the
@@ -40,6 +41,7 @@ func (imp *Importer) addImport(p *types.Package) {
 	}
 	path := p.Path()
 	if _, ok := imp.imports[path]; !ok {
+		imp.toAlias = true
 		imp.imports[path] = p
 	}
 }
@@ -99,6 +101,9 @@ func (imp *Importer) AliasedImports() map[string]string {
 }
 
 func (imp *Importer) aliasImports() map[string]string {
+	if !imp.toAlias {
+		return imp.aliasedImports
+	}
 	l := len(imp.imports)
 	paths := make([]string, 0, l)
 	for path := range imp.imports {
@@ -122,24 +127,46 @@ func (imp *Importer) aliasImports() map[string]string {
 		orderedImports[path] = alias
 		pkg.SetName(alias)
 	}
+	imp.aliasedImports = orderedImports // cache
+	imp.toAlias = false
 	return orderedImports
 }
 
-// Merge incorporates the packages from the given importer into this importer,
-// ensuring each package is only imported once as [Importer.AddImport].
+// AliasOf returns the alias of the given package path. If the package is not
+// imported, the function returns an empty string.
+func (imp *Importer) AliasOf(path string) string {
+	imp.mu.Lock()
+	defer imp.mu.Unlock()
+	return imp.aliasOf(path)
+}
+
+func (imp *Importer) aliasOf(path string) string {
+	if imp.toAlias {
+		imp.aliasImports()
+	}
+	return imp.aliasedImports[path]
+}
+
+// MergeImports incorporates the packages from the given importer into this
+// importer, ensuring each package is only imported once as
+// [Importer.AddImport]. If the given importer is nil, the function returns
+// without performing any operation.
 //
 // NOTE:
 // This method must be used very carefully and the given importer should be
 // discarded after the merge. Calling [Importer.AliasedImports] in any of the
 // two importers after the merge would alter the package names in unpredictable
 // ways. See [Importer.AliasedImports] for more details about package renaming.
-func (imp *Importer) Merge(imp2 *Importer) {
+func (imp *Importer) MergeImports(imp2 *Importer) {
 	imp.mu.Lock()
 	defer imp.mu.Unlock()
-	imp.merge(imp2)
+	if imp2 == nil {
+		return
+	}
+	imp.mergeImports(imp2)
 }
 
-func (imp *Importer) merge(imp2 *Importer) {
+func (imp *Importer) mergeImports(imp2 *Importer) {
 	pkgs := imp2.Imports() // public: no need to lock
 	for _, pkg := range pkgs {
 		imp.addImport(pkg)

@@ -1,4 +1,4 @@
-package aliaser
+package importer
 
 import (
 	"go/types"
@@ -10,10 +10,7 @@ import (
 )
 
 func TestImporter(t *testing.T) {
-	var imp *Importer
-	AliaserTest(func(t *testing.T, a *Aliaser) {
-		imp = a.alias.Importer
-	})(t)
+	imp := New()
 	const (
 		pkgName  = "fake"
 		pkgPath1 = "github.com/marcozac/go-aliaser/fake1"
@@ -37,7 +34,7 @@ func TestImporter(t *testing.T) {
 	})
 	t.Run("AliasedImports", func(t *testing.T) {
 		imports := imp.AliasedImports()
-		assert.GreaterOrEqual(t, l, 3)
+		assert.Equal(t, l, 3)
 		require.Contains(t, imports, pkgPath1)
 		require.Contains(t, imports, pkgPath2)
 		require.Contains(t, imports, pkgPath3)
@@ -52,17 +49,17 @@ func TestImporter(t *testing.T) {
 		assert.Equal(t, alias3, imp.imports[pkgPath3].Name())
 	})
 	t.Run("Merge", func(t *testing.T) {
-		imp2 := NewImporter()
+		imp2 := New()
 		imp2.AddImport(types.NewPackage(pkgPath1, pkgName)) // already exists
 		imp2.AddImport(types.NewPackage(pkgPath2, pkgName)) // already exists
 		imp2.AddImport(types.NewPackage("github.com/marcozac/go-aliaser/fake4", pkgName))
 		imp2.AddImport(types.NewPackage("github.com/marcozac/go-aliaser/fake5", pkgName))
-		imp.Merge(imp2)
+		imp.MergeImports(imp2)
 		assert.Equal(t, l+2, len(imp.Imports()))
 	})
 	l = len(imp.Imports()) // update l after merge
 	t.Run("Concurrent", func(t *testing.T) {
-		imp2 := NewImporter()
+		imp2 := New()
 		imp2.AddImport(types.NewPackage(pkgPath1, pkgName)) // already exists
 		const n = 100
 		var wg sync.WaitGroup
@@ -88,7 +85,7 @@ func TestImporter(t *testing.T) {
 				default:
 					go func() {
 						defer wg.Done()
-						imp.Merge(imp2)
+						imp.MergeImports(imp2)
 					}()
 				}
 			}
