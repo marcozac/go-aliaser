@@ -1,6 +1,7 @@
 package aliaser
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"go/types"
@@ -51,6 +52,18 @@ func TestAliaserOptions(t *testing.T) {
 			assert.NotEqual(t, "D", o.Name())
 		})
 	}, ExcludeNames("A", "D")))
+	t.Run("WrapFunctions", func(t *testing.T) {
+		t.Run("True", AliaserTest(func(t *testing.T, a *Aliaser) {
+			var buf bytes.Buffer
+			require.NoError(t, a.Generate(&buf))
+			assert.Contains(t, buf.String(), "func J(")
+		}, WrapFunctions(true)))
+		t.Run("False", AliaserTest(func(t *testing.T, a *Aliaser) {
+			var buf bytes.Buffer
+			require.NoError(t, a.Generate(&buf))
+			assert.NotContains(t, buf.String(), "func J(")
+		}, WrapFunctions(false)))
+	})
 }
 
 func TestAliaserError(t *testing.T) {

@@ -192,6 +192,13 @@ type config struct {
 	excludeFunctions bool
 	excludeTypes     bool
 	excludedNames    map[string]struct{}
+	wrapFunctions    bool
+}
+
+// WrapFunctions returns whether the aliases for the functions should be
+// wrapped instead of assigned to a variable.
+func (c *config) WrapFunctions() bool {
+	return c.wrapFunctions
 }
 
 func defaultConfig(target, pattern string) *Config {
@@ -202,6 +209,7 @@ func defaultConfig(target, pattern string) *Config {
 			pattern:       pattern,
 			ctx:           context.Background(),
 			excludedNames: make(map[string]struct{}),
+			wrapFunctions: true,
 		},
 	}
 }
@@ -268,5 +276,13 @@ func ExcludeNames(names ...string) Option {
 		for _, n := range names {
 			c.excludedNames[n] = struct{}{}
 		}
+	})
+}
+
+// WrapFunctions sets whether the aliases for the functions should be wrapped
+// instead of assigned to a variable.
+func WrapFunctions(v bool) Option {
+	return option(func(c *Config) {
+		c.wrapFunctions = v
 	})
 }

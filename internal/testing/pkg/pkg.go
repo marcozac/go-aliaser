@@ -7,6 +7,7 @@ import (
 	"context"
 	stdjson "encoding/json"
 	"strings"
+	"text/template"
 
 	"github.com/marcozac/go-aliaser/internal/testing/pkg/json"
 	"golang.org/x/tools/go/packages"
@@ -65,7 +66,7 @@ func J(
 	p17 context.CancelCauseFunc,
 	p18 stdjson.Marshaler,
 	p19 json.Foo,
-	p20 *packages.Module,
+	p20 ...*packages.Module,
 ) (int, any, *D, error) {
 	return 0, nil, nil, nil
 }
@@ -77,3 +78,5 @@ type K interface {
 type L interface {
 	K
 }
+
+type M template.Template

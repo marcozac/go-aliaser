@@ -5,15 +5,15 @@ package {{ $.TargetPackage }}
 
 import (
 {{ range $path, $alias := $.AliasedImports }}
-	{{ $alias }} "{{ $path }}"
+	{{- $alias }} "{{ $path }}"
 {{ end }}
 )
 {{- end }}
 
 {{ define "alias" }}
 {{- template "base" $ }}
-{{ with $.Constants }}{{ template "constants" . }}{{ end }}
-{{ with $.Variables }}{{ template "variables" . }}{{ end }}
-{{ with $.Functions }}{{ template "functions" . }}{{ end }}
-{{ with $.Types }}{{ template "types" . }}{{ end }}
+{{ with $.Constants }}{{ template "constants" $ }}{{ end }}
+{{ with $.Variables }}{{ template "variables" $ }}{{ end }}
+{{ with $.Functions }}{{ template "functions" $ }}{{ end }}
+{{ with $.Types }}{{ template "types" $ }}{{ end }}
 {{ end }}

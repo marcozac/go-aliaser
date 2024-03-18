@@ -1,7 +1,9 @@
 package aliaser
 
 import (
+	"bytes"
 	"go/types"
+	"strings"
 
 	"github.com/marcozac/go-aliaser/importer"
 )
@@ -12,14 +14,14 @@ var _ Object = (*Const)(nil)
 // It contains the original constant and the resolver used to generate the
 // aliases.
 type Const struct {
-	objectResolver
 	*types.Const
+	objectResolver
 }
 
 // NewConst returns a new [Const] with the given constant. The importer is used
 // to add the constant package to the list of imports.
 func NewConst(c *types.Const, imp *importer.Importer) *Const {
-	return &Const{newObjectResolver(c, imp), c}
+	return &Const{c, newObjectResolver(c, imp)}
 }
 
 var _ Object = (*Var)(nil)
@@ -28,14 +30,14 @@ var _ Object = (*Var)(nil)
 // It contains the original variable and the resolver used to generate the
 // aliases.
 type Var struct {
-	objectResolver
 	*types.Var
+	objectResolver
 }
 
 // NewVar returns a new [Var] with the given variable. The importer is used to
 // add the variable package to the list of imports.
 func NewVar(v *types.Var, imp *importer.Importer) *Var {
-	return &Var{newObjectResolver(v, imp), v}
+	return &Var{v, newObjectResolver(v, imp)}
 }
 
 var _ Object = (*Func)(nil)
@@ -44,14 +46,53 @@ var _ Object = (*Func)(nil)
 // It contains the original function and the resolver used to generate the
 // aliases.
 type Func struct {
-	objectResolver
 	*types.Func
+	objectResolver
+	tsig *types.Signature
 }
 
 // NewFunc returns a new [Func] with the given function. The importer is used to
 // add the function package to the list of imports.
 func NewFunc(fn *types.Func, imp *importer.Importer) *Func {
-	return &Func{newObjectResolver(fn, imp), fn}
+	nfn := &Func{fn, newObjectResolver(fn, imp), fn.Type().(*types.Signature)}
+	return nfn
+}
+
+// Signature returns the signature of the function as a string. It is a wrapper
+// around [types.WriteSignature] that uses a custom [types.Qualifier] to resolve
+// the package aliases.
+func (fn *Func) Signature() string {
+	buf := new(bytes.Buffer)
+	types.WriteSignature(buf, fn.tsig, fn.qualifier())
+	return buf.String()
+}
+
+// CallArgs returns the arguments of the function as a string. The arguments are
+// joined by a comma and the variadic argument is suffixed with "...".
+// If the function has no arguments, it returns an empty string.
+//
+// Example:
+//
+//	func(a int, b bool, c ...string) // "a, b, c..."
+func (fn *Func) CallArgs() string {
+	params := fn.tsig.Params()
+	l := params.Len()
+	if l == 0 {
+		return ""
+	}
+	names := make([]string, 0, l)
+	WalkTupleVars(params, func(pv *types.Var) {
+		names = append(names, pv.Name())
+	})
+	if fn.tsig.Variadic() {
+		names[l-1] += "..."
+	}
+	return strings.Join(names, ", ")
+}
+
+// Returns returns true if the function has results.
+func (fn *Func) Returns() bool {
+	return fn.tsig.Results().Len() > 0
 }
 
 var _ Object = (*TypeName)(nil)
@@ -60,14 +101,14 @@ var _ Object = (*TypeName)(nil)
 // It contains the original type and the resolver used to generate the
 // aliases.
 type TypeName struct {
-	objectResolver
 	*types.TypeName
+	objectResolver
 }
 
 // NewTypeName returns a new [TypeName] with the given type. The importer is used
 // to add the type package to the list of imports.
 func NewTypeName(tn *types.TypeName, imp *importer.Importer) *TypeName {
-	return &TypeName{newObjectResolver(tn, imp), tn}
+	return &TypeName{tn, newObjectResolver(tn, imp)}
 }
 
 type objectResolver struct {
@@ -95,9 +136,6 @@ func (o *objectResolver) TypeString() string {
 
 func (o *objectResolver) qualifier() types.Qualifier {
 	return func(p *types.Package) string {
-		if p == nil {
-			return ""
-		}
 		return o.imp.AliasOf(p.Path())
 	}
 }
@@ -114,8 +152,8 @@ func (o *objectResolver) importType(typ types.Type) {
 	case interface{ Elem() types.Type }: // *types.Array, *types.Slice, *types.Chan, *types.Pointer
 		o.importType(typ.Elem())
 	case *types.Signature:
-		WalkTupleVars(typ.Params(), o.varImporter())
-		WalkTupleVars(typ.Results(), o.varImporter())
+		o.importType(typ.Params())
+		o.importType(typ.Results())
 	case *types.Tuple:
 		WalkTupleVars(typ, o.varImporter())
 	case *types.Struct:
