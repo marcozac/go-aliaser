@@ -1,6 +1,6 @@
 {{ define "objects" }}
-{{- range $c := $ }}
-	{{ $c.Name }} = {{ $c.Pkg.Name }}.{{ $c.Name }}
+{{- range $o := $ }}
+	{{ $o.Name }} = {{ $o.PackageAlias }}.{{ $o.Name }}
 {{- end }}
 {{- end }}
 

@@ -15,16 +15,16 @@ type Alias struct {
 	*importer.Importer
 
 	// Constants is the list of exported constants in the loaded package.
-	Constants []*types.Const
+	Constants []*Const
 
 	// Variables is the list of exported variables in the loaded package.
-	Variables []*types.Var
+	Variables []*Var
 
 	// Functions is the list of exported functions in the loaded package.
-	Functions []*types.Func
+	Functions []*Func
 
 	// Types is the list of exported types in the loaded package.
-	Types []*types.TypeName
+	Types []*TypeName
 
 	mu sync.RWMutex
 }
@@ -41,7 +41,7 @@ func (a *Alias) AddConstants(cs ...*types.Const) {
 
 func (a *Alias) addConstant(c *types.Const) {
 	a.AddImport(c.Pkg())
-	a.Constants = append(a.Constants, c)
+	a.Constants = append(a.Constants, NewConst(c, a.Importer))
 }
 
 // AddVariables adds the given variables to the list of the variables to
@@ -56,7 +56,7 @@ func (a *Alias) AddVariables(vs ...*types.Var) {
 
 func (a *Alias) addVariable(v *types.Var) {
 	a.AddImport(v.Pkg())
-	a.Variables = append(a.Variables, v)
+	a.Variables = append(a.Variables, NewVar(v, a.Importer))
 }
 
 // AddFunctions adds the given functions to the list of the functions to
@@ -71,7 +71,7 @@ func (a *Alias) AddFunctions(fns ...*types.Func) {
 
 func (a *Alias) addFunction(fn *types.Func) {
 	a.AddImport(fn.Pkg())
-	a.Functions = append(a.Functions, fn)
+	a.Functions = append(a.Functions, NewFunc(fn, a.Importer))
 }
 
 // AddTypes adds the given types to the list of the types to generate aliases
@@ -86,5 +86,5 @@ func (a *Alias) AddTypes(ts ...*types.TypeName) {
 
 func (a *Alias) addType(t *types.TypeName) {
 	a.AddImport(t.Pkg())
-	a.Types = append(a.Types, t)
+	a.Types = append(a.Types, NewTypeName(t, a.Importer))
 }

@@ -80,7 +80,7 @@ func TestAliaserError(t *testing.T) {
 	})
 	t.Run("Format", AliaserTest(func(t *testing.T, a *Aliaser) {
 		c0 := a.alias.Constants[0] // change the first constant to have an invalid name
-		a.alias.Constants[0] = types.NewConst(c0.Pos(), c0.Pkg(), c0.Name()+".", c0.Type(), c0.Val())
+		a.alias.Constants[0] = NewConst(types.NewConst(c0.Pos(), c0.Pkg(), c0.Name()+".", c0.Type(), c0.Val()), a.alias.Importer)
 		assert.Error(t, a.Generate(io.Discard))
 	}))
 	t.Run("Write", AliaserTest(func(t *testing.T, a *Aliaser) {

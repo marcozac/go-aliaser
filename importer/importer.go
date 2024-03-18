@@ -146,29 +146,3 @@ func (imp *Importer) aliasOf(path string) string {
 	}
 	return imp.aliasedImports[path]
 }
-
-// MergeImports incorporates the packages from the given importer into this
-// importer, ensuring each package is only imported once as
-// [Importer.AddImport]. If the given importer is nil, the function returns
-// without performing any operation.
-//
-// NOTE:
-// This method must be used very carefully and the given importer should be
-// discarded after the merge. Calling [Importer.AliasedImports] in any of the
-// two importers after the merge would alter the package names in unpredictable
-// ways. See [Importer.AliasedImports] for more details about package renaming.
-func (imp *Importer) MergeImports(imp2 *Importer) {
-	imp.mu.Lock()
-	defer imp.mu.Unlock()
-	if imp2 == nil {
-		return
-	}
-	imp.mergeImports(imp2)
-}
-
-func (imp *Importer) mergeImports(imp2 *Importer) {
-	pkgs := imp2.Imports() // public: no need to lock
-	for _, pkg := range pkgs {
-		imp.addImport(pkg)
-	}
-}

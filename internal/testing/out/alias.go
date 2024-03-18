@@ -29,4 +29,6 @@ type (
 	E = pkg.E
 	F = pkg.F
 	G = pkg.G
+	K = pkg.K
+	L = pkg.L
 )

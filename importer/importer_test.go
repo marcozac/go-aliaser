@@ -48,44 +48,36 @@ func TestImporter(t *testing.T) {
 		assert.Equal(t, pkgName+"_3", alias3)
 		assert.Equal(t, alias3, imp.imports[pkgPath3].Name())
 	})
-	t.Run("Merge", func(t *testing.T) {
-		imp2 := New()
-		imp2.AddImport(types.NewPackage(pkgPath1, pkgName)) // already exists
-		imp2.AddImport(types.NewPackage(pkgPath2, pkgName)) // already exists
-		imp2.AddImport(types.NewPackage("github.com/marcozac/go-aliaser/fake4", pkgName))
-		imp2.AddImport(types.NewPackage("github.com/marcozac/go-aliaser/fake5", pkgName))
-		imp.MergeImports(imp2)
-		assert.Equal(t, l+2, len(imp.Imports()))
+	t.Run("AliasOf", func(t *testing.T) {
+		imp.toAlias = true // force re-aliasing
+		assert.Equal(t, pkgName, imp.AliasOf(pkgPath1))
+		assert.Equal(t, pkgName+"_2", imp.AliasOf(pkgPath2))
+		assert.Equal(t, pkgName+"_3", imp.AliasOf(pkgPath3))
+		assert.Empty(t, imp.AliasOf("unknown"))
 	})
-	l = len(imp.Imports()) // update l after merge
 	t.Run("Concurrent", func(t *testing.T) {
 		imp2 := New()
 		imp2.AddImport(types.NewPackage(pkgPath1, pkgName)) // already exists
-		const n = 100
+		const n = 150
 		var wg sync.WaitGroup
 		wg.Add(n)
 		assert.NotPanics(t, func() {
 			for i := 0; i < n; i++ {
 				switch {
-				case i < 25:
+				case i < 50:
 					go func() {
 						defer wg.Done()
 						imp.AddImport(types.NewPackage(pkgPath1, pkgName)) // already exists
 					}()
-				case i >= 25 && i < 50:
+				case i >= 50 && i < 100:
 					go func() {
 						defer wg.Done()
 						_ = imp.AliasedImports()
 					}()
-				case i >= 50 && i < 75:
+				case i >= 100 && i < 150:
 					go func() {
 						defer wg.Done()
 						_ = imp.Imports()
-					}()
-				default:
-					go func() {
-						defer wg.Done()
-						imp.MergeImports(imp2)
 					}()
 				}
 			}
