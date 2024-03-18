@@ -65,8 +65,8 @@ func J(
 	p16 map[D]E,
 	p17 context.CancelCauseFunc,
 	p18 stdjson.Marshaler,
-	p19 json.Foo,
-	p20 ...*packages.Module,
+	json json.Foo, // test same name of alias
+	variadic ...*packages.Module,
 ) (int, any, *D, error) {
 	return 0, nil, nil, nil
 }

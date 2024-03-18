@@ -2,7 +2,12 @@
 
 package gin
 
-import "github.com/gin-gonic/gin"
+import (
+	io "io"
+	http "net/http"
+
+	gin "github.com/gin-gonic/gin"
+)
 
 const (
 	AuthUserKey             = gin.AuthUserKey
@@ -39,37 +44,117 @@ var (
 	DefaultWriter       = gin.DefaultWriter
 )
 
-// Functions
-var (
-	BasicAuth                              = gin.BasicAuth
-	BasicAuthForRealm                      = gin.BasicAuthForRealm
-	Bind                                   = gin.Bind
-	CreateTestContext                      = gin.CreateTestContext
-	CreateTestContextOnly                  = gin.CreateTestContextOnly
-	CustomRecovery                         = gin.CustomRecovery
-	CustomRecoveryWithWriter               = gin.CustomRecoveryWithWriter
-	Default                                = gin.Default
-	Dir                                    = gin.Dir
-	DisableBindValidation                  = gin.DisableBindValidation
-	DisableConsoleColor                    = gin.DisableConsoleColor
-	EnableJsonDecoderDisallowUnknownFields = gin.EnableJsonDecoderDisallowUnknownFields
-	EnableJsonDecoderUseNumber             = gin.EnableJsonDecoderUseNumber
-	ErrorLogger                            = gin.ErrorLogger
-	ErrorLoggerT                           = gin.ErrorLoggerT
-	ForceConsoleColor                      = gin.ForceConsoleColor
-	IsDebugging                            = gin.IsDebugging
-	Logger                                 = gin.Logger
-	LoggerWithConfig                       = gin.LoggerWithConfig
-	LoggerWithFormatter                    = gin.LoggerWithFormatter
-	LoggerWithWriter                       = gin.LoggerWithWriter
-	Mode                                   = gin.Mode
-	New                                    = gin.New
-	Recovery                               = gin.Recovery
-	RecoveryWithWriter                     = gin.RecoveryWithWriter
-	SetMode                                = gin.SetMode
-	WrapF                                  = gin.WrapF
-	WrapH                                  = gin.WrapH
-)
+func BasicAuth(accounts gin.Accounts) gin.HandlerFunc {
+	return gin.BasicAuth(accounts)
+}
+
+func BasicAuthForRealm(accounts gin.Accounts, realm string) gin.HandlerFunc {
+	return gin.BasicAuthForRealm(accounts, realm)
+}
+
+func Bind(val any) gin.HandlerFunc {
+	return gin.Bind(val)
+}
+
+func CreateTestContext(w http.ResponseWriter) (c *gin.Context, r *gin.Engine) {
+	return gin.CreateTestContext(w)
+}
+
+func CreateTestContextOnly(w http.ResponseWriter, r *gin.Engine) (c *gin.Context) {
+	return gin.CreateTestContextOnly(w, r)
+}
+
+func CustomRecovery(handle gin.RecoveryFunc) gin.HandlerFunc {
+	return gin.CustomRecovery(handle)
+}
+
+func CustomRecoveryWithWriter(out io.Writer, handle gin.RecoveryFunc) gin.HandlerFunc {
+	return gin.CustomRecoveryWithWriter(out, handle)
+}
+
+func Default() *gin.Engine {
+	return gin.Default()
+}
+
+func Dir(root string, listDirectory bool) http.FileSystem {
+	return gin.Dir(root, listDirectory)
+}
+
+func DisableBindValidation() {
+	gin.DisableBindValidation()
+}
+
+func DisableConsoleColor() {
+	gin.DisableConsoleColor()
+}
+
+func EnableJsonDecoderDisallowUnknownFields() {
+	gin.EnableJsonDecoderDisallowUnknownFields()
+}
+
+func EnableJsonDecoderUseNumber() {
+	gin.EnableJsonDecoderUseNumber()
+}
+
+func ErrorLogger() gin.HandlerFunc {
+	return gin.ErrorLogger()
+}
+
+func ErrorLoggerT(typ gin.ErrorType) gin.HandlerFunc {
+	return gin.ErrorLoggerT(typ)
+}
+
+func ForceConsoleColor() {
+	gin.ForceConsoleColor()
+}
+
+func IsDebugging() bool {
+	return gin.IsDebugging()
+}
+
+func Logger() gin.HandlerFunc {
+	return gin.Logger()
+}
+
+func LoggerWithConfig(conf gin.LoggerConfig) gin.HandlerFunc {
+	return gin.LoggerWithConfig(conf)
+}
+
+func LoggerWithFormatter(f gin.LogFormatter) gin.HandlerFunc {
+	return gin.LoggerWithFormatter(f)
+}
+
+func LoggerWithWriter(out io.Writer, notlogged ...string) gin.HandlerFunc {
+	return gin.LoggerWithWriter(out, notlogged...)
+}
+
+func Mode() string {
+	return gin.Mode()
+}
+
+func New() *gin.Engine {
+	return gin.New()
+}
+
+func Recovery() gin.HandlerFunc {
+	return gin.Recovery()
+}
+
+func RecoveryWithWriter(out io.Writer, recovery ...gin.RecoveryFunc) gin.HandlerFunc {
+	return gin.RecoveryWithWriter(out, recovery...)
+}
+
+func SetMode(value string) {
+	gin.SetMode(value)
+}
+
+func WrapF(f http.HandlerFunc) gin.HandlerFunc {
+	return gin.WrapF(f)
+}
+
+func WrapH(h http.Handler) gin.HandlerFunc {
+	return gin.WrapH(h)
+}
 
 type (
 	Accounts           = gin.Accounts

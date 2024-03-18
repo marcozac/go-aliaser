@@ -3,6 +3,7 @@ package aliaser
 import (
 	"bytes"
 	"go/types"
+	"slices"
 	"strings"
 
 	"github.com/marcozac/go-aliaser/importer"
@@ -48,14 +49,13 @@ var _ Object = (*Func)(nil)
 type Func struct {
 	*types.Func
 	objectResolver
-	tsig *types.Signature
+	tsig *Signature
 }
 
 // NewFunc returns a new [Func] with the given function. The importer is used to
 // add the function package to the list of imports.
 func NewFunc(fn *types.Func, imp *importer.Importer) *Func {
-	nfn := &Func{fn, newObjectResolver(fn, imp), fn.Type().(*types.Signature)}
-	return nfn
+	return &Func{fn, newObjectResolver(fn, imp), NewSignature(fn.Type().(*types.Signature), imp)}
 }
 
 // Signature returns the signature of the function as a string. It is a wrapper
@@ -63,7 +63,7 @@ func NewFunc(fn *types.Func, imp *importer.Importer) *Func {
 // the package aliases.
 func (fn *Func) Signature() string {
 	buf := new(bytes.Buffer)
-	types.WriteSignature(buf, fn.tsig, fn.qualifier())
+	types.WriteSignature(buf, fn.tsig.Wrapper(), fn.qualifier())
 	return buf.String()
 }
 
@@ -75,7 +75,7 @@ func (fn *Func) Signature() string {
 //
 //	func(a int, b bool, c ...string) // "a, b, c..."
 func (fn *Func) CallArgs() string {
-	params := fn.tsig.Params()
+	params := fn.tsig.Wrapper().Params()
 	l := params.Len()
 	if l == 0 {
 		return ""
@@ -229,4 +229,65 @@ func WalkInterfaceEmbeddeds(iface *types.Interface, fn func(types.Type)) {
 	for i := 0; i < iface.NumEmbeddeds(); i++ {
 		fn(iface.EmbeddedType(i))
 	}
+}
+
+type Signature struct {
+	*types.Signature
+	imp *importer.Importer
+}
+
+func NewSignature(sig *types.Signature, imp *importer.Importer) *Signature {
+	return &Signature{sig, imp}
+}
+
+func (s *Signature) Wrapper() *types.Signature {
+	ai := s.imp.AliasedImports()
+	aliases := make([]string, 0, len(ai))
+	for _, alias := range ai {
+		aliases = append(aliases, alias)
+	}
+	params := make([]*types.Var, 0, s.Params().Len())
+	WalkTupleVars(s.Params(), func(pv *types.Var) {
+		if slices.Contains(aliases, pv.Name()) {
+			params = append(params, types.NewVar(pv.Pos(), pv.Pkg(), "_"+pv.Name(), pv.Type()))
+		} else {
+			params = append(params, pv)
+		}
+	})
+	results := make([]*types.Var, 0, s.Results().Len())
+	WalkTupleVars(s.Results(), func(pv *types.Var) {
+		if slices.Contains(aliases, pv.Name()) {
+			results = append(results, types.NewVar(pv.Pos(), pv.Pkg(), "_"+pv.Name(), pv.Type()))
+		} else {
+			results = append(results, pv)
+		}
+	})
+	rtp := s.RecvTypeParams()
+	tp := s.TypeParams()
+	return types.NewSignatureType(
+		s.Recv(),
+		NewIterableType(rtp.Len, rtp.At).Slice(),
+		NewIterableType(tp.Len, tp.At).Slice(),
+		types.NewTuple(params...),
+		types.NewTuple(results...),
+		s.Variadic(),
+	)
+}
+
+type IterableType[T any] struct {
+	len func() int
+	get func(int) T
+}
+
+func NewIterableType[T any](len func() int, get func(int) T) *IterableType[T] {
+	return &IterableType[T]{len, get}
+}
+
+func (it *IterableType[T]) Slice() []T {
+	l := it.len()
+	slice := make([]T, l)
+	for i := 0; i < l; i++ {
+		slice[i] = it.get(i)
+	}
+	return slice
 }
