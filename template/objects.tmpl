@@ -17,17 +17,17 @@ var (
 {{- end }}
 
 {{ define "functions" }}
-{{ if $.WrapFunctions }}
+{{ if $.AssignFunctions }}
+// Functions
+var (
+	{{- template "simple_objects" $.Functions }}
+)
+{{ else }}
 {{ range $o := $.Functions }}
 func {{ $o.Name }} {{ $o.WriteSignature }} {
 	{{ if $o.Returns }} return {{ end }}{{ $o.PackageAlias }}.{{ $o.Name }}({{ $o.CallArgs }})
 }
 {{ end }}
-{{ else }}
-// Functions
-var (
-	{{- template "simple_objects" $.Functions }}
-)
 {{- end }}
 {{- end }}
 

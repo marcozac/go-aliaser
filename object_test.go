@@ -10,7 +10,7 @@ import (
 func TestObject(t *testing.T) {
 	t.Run("TypeString", AliaserTest(func(t *testing.T, a *Aliaser) {
 		var tn *TypeName
-		for _, atn := range a.alias.Types {
+		for _, atn := range a.Types() {
 			if atn.Name() == "M" {
 				tn = atn
 				break

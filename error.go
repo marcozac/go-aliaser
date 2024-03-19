@@ -8,6 +8,9 @@ import (
 )
 
 var (
+	// ErrNilConfig is returned when the given config is nil.
+	ErrNilConfig = errors.New("nil config")
+
 	// ErrEmptyTarget is returned when the given target is empty.
 	ErrEmptyTarget = errors.New("empty target")
 

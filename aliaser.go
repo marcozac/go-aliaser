@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"text/template"
 
 	"github.com/marcozac/go-aliaser/importer"
@@ -18,6 +19,27 @@ import (
 
 //go:embed template/*
 var tmplFS embed.FS
+
+// Aliaser is the primary type of this package. It is used to generate the
+// aliases for the loaded package.
+type Aliaser struct {
+	*Config
+	*importer.Importer
+
+	// constants is the list of exported constants in the loaded package.
+	constants []*Const
+
+	// Variables is the list of exported variables in the loaded package.
+	variables []*Var
+
+	// Functions is the list of exported functions in the loaded package.
+	functions []*Func
+
+	// Types is the list of exported types in the loaded package.
+	types []*TypeName
+
+	mu sync.RWMutex
+}
 
 // New returns a new [Aliaser] with the given target and pattern.
 //
@@ -42,28 +64,24 @@ var tmplFS embed.FS
 //	const (
 //		// ...
 //	)
-func New(target, pattern string, opts ...Option) (*Aliaser, error) {
-	switch "" {
-	case target:
+func New(c *Config, opts ...Option) (*Aliaser, error) {
+	switch {
+	case c == nil:
+		return nil, ErrNilConfig
+	case c.TargetPackage == "":
 		return nil, ErrEmptyTarget
-	case pattern:
+	case c.Pattern == "":
 		return nil, ErrEmptyPattern
 	}
-	c := defaultConfig(target, pattern)
-	for _, o := range opts {
-		o.set(c)
+	a := &Aliaser{
+		Config: c.setDefaults().
+			applyOptions(opts...),
+		Importer: importer.New(),
 	}
-	a := &Aliaser{}
-	if err := a.load(c); err != nil {
+	if err := a.load(); err != nil {
 		return nil, err
 	}
 	return a, nil
-}
-
-// Aliaser is the primary type of this package. It is used to generate the
-// aliases for the loaded package.
-type Aliaser struct {
-	alias *Alias
 }
 
 // Generate writes the aliases to the given writer.
@@ -71,6 +89,8 @@ type Aliaser struct {
 // Generate returns an error if fails to execute the template, format the
 // generated code, or write the result to the writer.
 func (a *Aliaser) Generate(wr io.Writer) error {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
 	buf := new(bytes.Buffer)
 	if err := a.executeTemplate(buf); err != nil {
 		return err
@@ -109,16 +129,136 @@ func (a *Aliaser) executeTemplate(buf *bytes.Buffer) error {
 	if err != nil {
 		return fmt.Errorf("parse template: %w", err)
 	}
-	if err := tmpl.ExecuteTemplate(buf, "alias", a.alias); err != nil {
+	if err := tmpl.ExecuteTemplate(buf, "alias", a); err != nil {
 		return fmt.Errorf("execute template: %w", err)
 	}
 	return nil
 }
 
+// Constants returns the list of the constants loaded for aliasing.
+// It is safe for concurrent use.
+func (a *Aliaser) Constants() []*Const {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.constants
+}
+
+// AddConstants adds the given constants to the list of the constants to
+// generate aliases for.
+// It is safe for concurrent use.
+//
+// NOTE:
+// Currently, the Aliaser does not perform any check to avoid adding the same
+// constant or any other object with the same name more than once. Adding a
+// constant with the same name of another object will result in a non-buildable
+// generated code.
+func (a *Aliaser) AddConstants(cs ...*types.Const) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, c := range cs {
+		a.addConstant(c)
+	}
+}
+
+func (a *Aliaser) addConstant(c *types.Const) {
+	a.AddImport(c.Pkg())
+	a.constants = append(a.constants, NewConst(c, a.Importer))
+}
+
+// Variables returns the list of the variables loaded for aliasing.
+// It is safe for concurrent use.
+func (a *Aliaser) Variables() []*Var {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.variables
+}
+
+// AddVariables adds the given variables to the list of the variables to
+// generate aliases for.
+// It is safe for concurrent use.
+//
+// NOTE:
+// Currently, the Aliaser does not perform any check to avoid adding the same
+// variable or any other object with the same name more than once. Adding a
+// variable with the same name of another object will result in a non-buildable
+// generated code.
+func (a *Aliaser) AddVariables(vs ...*types.Var) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, v := range vs {
+		a.addVariable(v)
+	}
+}
+
+func (a *Aliaser) addVariable(v *types.Var) {
+	a.AddImport(v.Pkg())
+	a.variables = append(a.variables, NewVar(v, a.Importer))
+}
+
+// Functions returns the list of the functions loaded for aliasing.
+// It is safe for concurrent use.
+func (a *Aliaser) Functions() []*Func {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.functions
+}
+
+// AddFunctions adds the given functions to the list of the functions to
+// generate aliases for.
+// It is safe for concurrent use.
+//
+// NOTE:
+// Currently, the Aliaser does not perform any check to avoid adding the same
+// function or any other object with the same name more than once. Adding a
+// function with the same name of another object will result in a non-buildable
+// generated code.
+func (a *Aliaser) AddFunctions(fns ...*types.Func) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, fn := range fns {
+		a.addFunction(fn)
+	}
+}
+
+func (a *Aliaser) addFunction(fn *types.Func) {
+	a.AddImport(fn.Pkg())
+	a.functions = append(a.functions, NewFunc(fn, a.Importer))
+}
+
+// Types returns the list of the types loaded for aliasing.
+// It is safe for concurrent use.
+func (a *Aliaser) Types() []*TypeName {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.types
+}
+
+// AddTypes adds the given types to the list of the types to generate aliases
+// for.
+// It is safe for concurrent use.
+//
+// NOTE:
+// Currently, the Aliaser does not perform any check to avoid adding the same
+// type or any other object with the same name more than once. Adding a type
+// with the same name of another object will result in a non-buildable generated
+// code.
+func (a *Aliaser) AddTypes(ts ...*types.TypeName) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, t := range ts {
+		a.addType(t)
+	}
+}
+
+func (a *Aliaser) addType(t *types.TypeName) {
+	a.AddImport(t.Pkg())
+	a.types = append(a.types, NewTypeName(t, a.Importer))
+}
+
 const loadMode = packages.NeedName | packages.NeedTypes
 
-func (a *Aliaser) load(c *Config) error {
-	pkgs, err := packages.Load(&packages.Config{Mode: loadMode, Context: c.ctx}, c.pattern)
+func (a *Aliaser) load() error {
+	pkgs, err := packages.Load(&packages.Config{Mode: loadMode, Context: a.ctx}, a.Pattern)
 	if err != nil {
 		return fmt.Errorf("load packages: %w", err)
 	}
@@ -129,40 +269,36 @@ func (a *Aliaser) load(c *Config) error {
 	if errs := pkg.Errors; len(errs) > 0 {
 		return fmt.Errorf("package errors: %w", PackagesErrors(errs))
 	}
-	return a.setAlias(c, pkg)
+	return a.setAlias(pkg)
 }
 
-func (a *Aliaser) setAlias(c *Config, pkg *packages.Package) error {
-	a.alias = &Alias{
-		Config:   c,
-		Importer: importer.New(),
-	}
-	a.alias.AddImport(pkg.Types)
+func (a *Aliaser) setAlias(pkg *packages.Package) error {
+	a.AddImport(pkg.Types)
 	scope := pkg.Types.Scope()
 	for _, name := range pkg.Types.Scope().Names() {
 		o := scope.Lookup(name)
 		if !o.Exported() {
 			continue
 		}
-		if _, ok := c.excludedNames[o.Name()]; ok {
+		if _, ok := a.excludedNames[o.Name()]; ok {
 			continue
 		}
 		switch o := o.(type) {
 		case *types.Const:
-			if !c.excludeConstants {
-				a.alias.AddConstants(o)
+			if !a.excludeConstants {
+				a.AddConstants(o)
 			}
 		case *types.Var:
-			if !c.excludeVariables {
-				a.alias.AddVariables(o)
+			if !a.excludeVariables {
+				a.AddVariables(o)
 			}
 		case *types.Func:
-			if !c.excludeFunctions {
-				a.alias.AddFunctions(o)
+			if !a.excludeFunctions {
+				a.AddFunctions(o)
 			}
 		case *types.TypeName:
-			if !c.excludeTypes {
-				a.alias.AddTypes(o)
+			if !a.excludeTypes {
+				a.AddTypes(o)
 			}
 		default: // should never happen
 			return fmt.Errorf("unexpected object type for %s: %T", o.Name(), o)
@@ -171,47 +307,60 @@ func (a *Aliaser) setAlias(c *Config, pkg *packages.Package) error {
 	return nil
 }
 
-// Config is the configuration used to define the target package. It is
-// embedded in the [Alias] type.
+// Config is the configuration used to define the target package.
 type Config struct {
 	config
 
+	// [REQUIRED]
 	// TargetPackage is the name of the package where the aliases will be
-	// generated.
+	// generated. For example, if the package path is
+	// "github.com/marcozac/go-aliaser/pkg-that-needs-aliases/foo", the target
+	// package is "foo".
 	TargetPackage string
 
+	// [REQUIRED]
+	// Pattern is the package pattern in Go format to be loaded.
+	//
+	// Example:
+	//
+	//	"github.com/marcozac/go-aliaser/pkg-that-will-be-aliased"
+	Pattern string
+
 	// Header is an optional header to be written at the top of the file.
+	//
+	// Default: "// Code generated by aliaser. DO NOT EDIT."
 	Header string
+
+	// AssignFunctions sets whether the aliases for the functions should be
+	// assigned to a variable instead of being wrapped.
+	AssignFunctions bool
+}
+
+func (c *Config) setDefaults() *Config {
+	c.excludedNames = make(map[string]struct{})
+	if c.Header == "" {
+		c.Header = "// Code generated by aliaser. DO NOT EDIT."
+	}
+	if c.ctx == nil {
+		c.ctx = context.Background()
+	}
+	return c
+}
+
+func (c *Config) applyOptions(opts ...Option) *Config {
+	for _, o := range opts {
+		o.set(c)
+	}
+	return c
 }
 
 type config struct {
-	pattern          string // required
 	ctx              context.Context
 	excludeConstants bool
 	excludeVariables bool
 	excludeFunctions bool
 	excludeTypes     bool
 	excludedNames    map[string]struct{}
-	wrapFunctions    bool
-}
-
-// WrapFunctions returns whether the aliases for the functions should be
-// wrapped instead of assigned to a variable.
-func (c *config) WrapFunctions() bool {
-	return c.wrapFunctions
-}
-
-func defaultConfig(target, pattern string) *Config {
-	return &Config{
-		TargetPackage: target,
-		Header:        "// Code generated by aliaser. DO NOT EDIT.",
-		config: config{
-			pattern:       pattern,
-			ctx:           context.Background(),
-			excludedNames: make(map[string]struct{}),
-			wrapFunctions: true,
-		},
-	}
 }
 
 // Option is the interface implemented by all options.
@@ -279,10 +428,10 @@ func ExcludeNames(names ...string) Option {
 	})
 }
 
-// WrapFunctions sets whether the aliases for the functions should be wrapped
-// instead of assigned to a variable.
-func WrapFunctions(v bool) Option {
+// AssignFunctions sets whether the aliases for the functions should be
+// assigned to a variable instead of being wrapped.
+func AssignFunctions(v bool) Option {
 	return option(func(c *Config) {
-		c.wrapFunctions = v
+		c.AssignFunctions = v
 	})
 }

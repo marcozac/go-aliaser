@@ -12,7 +12,7 @@ import (
 // Under the hood, Generate creates a new [Aliaser] with the given parameters
 // and calls [Aliaser.Generate] with the writer.
 func Generate(target, pattern string, wr io.Writer, opts ...Option) error {
-	a, err := New(target, pattern, opts...)
+	a, err := New(&Config{TargetPackage: target, Pattern: pattern}, opts...)
 	if err != nil {
 		return fmt.Errorf("aliaser: %w", err)
 	}
@@ -23,7 +23,7 @@ func Generate(target, pattern string, wr io.Writer, opts ...Option) error {
 // with the given name. It creates the necessary directories if they don't
 // exist.
 func GenerateFile(target, pattern, name string, opts ...Option) error {
-	a, err := New(target, pattern, opts...)
+	a, err := New(&Config{TargetPackage: target, Pattern: pattern}, opts...)
 	if err != nil {
 		return fmt.Errorf("aliaser: %w", err)
 	}
