@@ -44,9 +44,9 @@ func TestImporter(t *testing.T) {
 		assert.Equal(t, pkgName, alias1)
 		assert.Equal(t, alias1, imp.imports[pkgPath1].Name())
 		assert.Equal(t, pkgName+"_2", alias2)
-		assert.Equal(t, alias2, imp.imports[pkgPath2].Name())
+		assert.NotEqual(t, alias2, imp.imports[pkgPath2].Name())
 		assert.Equal(t, pkgName+"_3", alias3)
-		assert.Equal(t, alias3, imp.imports[pkgPath3].Name())
+		assert.NotEqual(t, alias3, imp.imports[pkgPath3].Name())
 	})
 	t.Run("AliasOf", func(t *testing.T) {
 		imp.toAlias = true // force re-aliasing

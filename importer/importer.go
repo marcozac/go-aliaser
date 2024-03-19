@@ -7,22 +7,23 @@ import (
 	"sync"
 )
 
-// New returns a new [Importer].
-func New() *Importer {
-	return &Importer{imports: make(map[string]*types.Package)}
-}
-
 // Importer is the type used to manage the package imports.
 // It is used to ensure that the same package is imported only once and to
 // alias the package names avoiding conflicts on same-name packages.
 //
-// All exported methods are safe for concurrent use.
+// All exported methods are safe for concurrent use if the underlying package
+// is not modified concurrently by other goroutines.
 type Importer struct {
 	// imports is the map of package imports formatted as "path:Package"
 	imports        map[string]*types.Package
 	toAlias        bool
 	aliasedImports map[string]string
 	mu             sync.RWMutex
+}
+
+// New returns a new [Importer].
+func New() *Importer {
+	return &Importer{imports: make(map[string]*types.Package)}
 }
 
 // AddImport adds the given package to the list of imports ensuring that the
@@ -63,17 +64,16 @@ func (imp *Importer) importsList() []*types.Package {
 
 // AliasedImports returns the map of package imports formatted as "path:alias".
 // All the imports are aliased to avoid conflicts on same-name packages.
-// Moreover, the imports are sorted by path before aliasing them ensuring
+// Moreover, the imports are sorted by path before aliasing them, ensuring
 // deterministic results and avoiding, for example, false positives in tests
 // comparing the generated code.
 //
 // NOTE:
-// Calling this method will also modify the package names of the imported
-// packages. [types.Package.Name] will then return the alias instead of the
-// original name. For this reason and because the aliased name (and the package
-// name itself) would be different if, between two calls to this method, is
-// added another package with the same name but a path that sorts before, this
-// method should be called only once, after all imports have been added.
+// The method should be called only once, after all imports have been added, or
+// it may produce inconsistent results. For example, if a package (B) is added
+// after the first call and has the same name of another one (A) but a path
+// that sorts before, A alias will be different from the first result. See the
+// example below for more details.
 //
 // Example:
 //
@@ -93,7 +93,7 @@ func (imp *Importer) importsList() []*types.Package {
 //	imports = a.AliasedImports()
 //	// "github.com/marcozac/go-aliaser/fake1": "fake"
 //	// "github.com/marcozac/go-aliaser/fake2": "fake_2"
-//	// "github.com/marcozac/go-aliaser/fake3": "fake_3"
+//	// "github.com/marcozac/go-aliaser/fake3": "fake_3" // different alias!
 func (imp *Importer) AliasedImports() map[string]string {
 	imp.mu.Lock()
 	defer imp.mu.Unlock()
@@ -125,7 +125,6 @@ func (imp *Importer) aliasImports() map[string]string {
 			}
 		}
 		orderedImports[path] = alias
-		pkg.SetName(alias)
 	}
 	imp.aliasedImports = orderedImports // cache
 	imp.toAlias = false
