@@ -2,7 +2,12 @@
 
 package uuid
 
-import "github.com/google/uuid"
+import (
+	hash "hash"
+	io "io"
+
+	uuid "github.com/google/uuid"
+)
 
 const (
 	Future    = uuid.Future
@@ -24,40 +29,129 @@ var (
 	Nil           = uuid.Nil
 )
 
-// Functions
-var (
-	ClockSequence        = uuid.ClockSequence
-	DisableRandPool      = uuid.DisableRandPool
-	EnableRandPool       = uuid.EnableRandPool
-	FromBytes            = uuid.FromBytes
-	GetTime              = uuid.GetTime
-	IsInvalidLengthError = uuid.IsInvalidLengthError
-	Must                 = uuid.Must
-	MustParse            = uuid.MustParse
-	New                  = uuid.New
-	NewDCEGroup          = uuid.NewDCEGroup
-	NewDCEPerson         = uuid.NewDCEPerson
-	NewDCESecurity       = uuid.NewDCESecurity
-	NewHash              = uuid.NewHash
-	NewMD5               = uuid.NewMD5
-	NewRandom            = uuid.NewRandom
-	NewRandomFromReader  = uuid.NewRandomFromReader
-	NewSHA1              = uuid.NewSHA1
-	NewString            = uuid.NewString
-	NewUUID              = uuid.NewUUID
-	NewV6                = uuid.NewV6
-	NewV7                = uuid.NewV7
-	NewV7FromReader      = uuid.NewV7FromReader
-	NodeID               = uuid.NodeID
-	NodeInterface        = uuid.NodeInterface
-	Parse                = uuid.Parse
-	ParseBytes           = uuid.ParseBytes
-	SetClockSequence     = uuid.SetClockSequence
-	SetNodeID            = uuid.SetNodeID
-	SetNodeInterface     = uuid.SetNodeInterface
-	SetRand              = uuid.SetRand
-	Validate             = uuid.Validate
-)
+func ClockSequence() int {
+	return uuid.ClockSequence()
+}
+
+func DisableRandPool() {
+	uuid.DisableRandPool()
+}
+
+func EnableRandPool() {
+	uuid.EnableRandPool()
+}
+
+func FromBytes(b []byte) (_uuid uuid.UUID, err error) {
+	return uuid.FromBytes(b)
+}
+
+func GetTime() (uuid.Time, uint16, error) {
+	return uuid.GetTime()
+}
+
+func IsInvalidLengthError(err error) bool {
+	return uuid.IsInvalidLengthError(err)
+}
+
+func Must(_uuid uuid.UUID, err error) uuid.UUID {
+	return uuid.Must(_uuid, err)
+}
+
+func MustParse(s string) uuid.UUID {
+	return uuid.MustParse(s)
+}
+
+func New() uuid.UUID {
+	return uuid.New()
+}
+
+func NewDCEGroup() (uuid.UUID, error) {
+	return uuid.NewDCEGroup()
+}
+
+func NewDCEPerson() (uuid.UUID, error) {
+	return uuid.NewDCEPerson()
+}
+
+func NewDCESecurity(domain uuid.Domain, id uint32) (uuid.UUID, error) {
+	return uuid.NewDCESecurity(domain, id)
+}
+
+func NewHash(h hash.Hash, space uuid.UUID, data []byte, version int) uuid.UUID {
+	return uuid.NewHash(h, space, data, version)
+}
+
+func NewMD5(space uuid.UUID, data []byte) uuid.UUID {
+	return uuid.NewMD5(space, data)
+}
+
+func NewRandom() (uuid.UUID, error) {
+	return uuid.NewRandom()
+}
+
+func NewRandomFromReader(r io.Reader) (uuid.UUID, error) {
+	return uuid.NewRandomFromReader(r)
+}
+
+func NewSHA1(space uuid.UUID, data []byte) uuid.UUID {
+	return uuid.NewSHA1(space, data)
+}
+
+func NewString() string {
+	return uuid.NewString()
+}
+
+func NewUUID() (uuid.UUID, error) {
+	return uuid.NewUUID()
+}
+
+func NewV6() (uuid.UUID, error) {
+	return uuid.NewV6()
+}
+
+func NewV7() (uuid.UUID, error) {
+	return uuid.NewV7()
+}
+
+func NewV7FromReader(r io.Reader) (uuid.UUID, error) {
+	return uuid.NewV7FromReader(r)
+}
+
+func NodeID() []byte {
+	return uuid.NodeID()
+}
+
+func NodeInterface() string {
+	return uuid.NodeInterface()
+}
+
+func Parse(s string) (uuid.UUID, error) {
+	return uuid.Parse(s)
+}
+
+func ParseBytes(b []byte) (uuid.UUID, error) {
+	return uuid.ParseBytes(b)
+}
+
+func SetClockSequence(seq int) {
+	uuid.SetClockSequence(seq)
+}
+
+func SetNodeID(id []byte) bool {
+	return uuid.SetNodeID(id)
+}
+
+func SetNodeInterface(name string) bool {
+	return uuid.SetNodeInterface(name)
+}
+
+func SetRand(r io.Reader) {
+	uuid.SetRand(r)
+}
+
+func Validate(s string) error {
+	return uuid.Validate(s)
+}
 
 type (
 	Domain   = uuid.Domain

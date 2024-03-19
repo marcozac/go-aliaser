@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"text/template"
 
+	"github.com/marcozac/go-aliaser/importer"
 	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/imports"
 )
@@ -91,6 +92,7 @@ func (a *Aliaser) Generate(wr io.Writer) error {
 // GenerateFile returns an error in the same cases as [Aliaser.Generate] and
 // if any of the directory creation or file writing operations fail.
 func (a *Aliaser) GenerateFile(name string) error {
+	// TODO: keep a backup and restore in case of failure
 	if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
 		return fmt.Errorf("create directory: %w", err)
 	}
@@ -132,8 +134,10 @@ func (a *Aliaser) load(c *Config) error {
 
 func (a *Aliaser) setAlias(c *Config, pkg *packages.Package) error {
 	a.alias = &Alias{
-		Config: c,
+		Config:   c,
+		Importer: importer.New(),
 	}
+	a.alias.AddImport(pkg.Types)
 	scope := pkg.Types.Scope()
 	for _, name := range pkg.Types.Scope().Names() {
 		o := scope.Lookup(name)
@@ -146,54 +150,25 @@ func (a *Aliaser) setAlias(c *Config, pkg *packages.Package) error {
 		switch o := o.(type) {
 		case *types.Const:
 			if !c.excludeConstants {
-				a.alias.Constants = append(a.alias.Constants, o)
+				a.alias.AddConstants(o)
 			}
 		case *types.Var:
 			if !c.excludeVariables {
-				a.alias.Variables = append(a.alias.Variables, o)
+				a.alias.AddVariables(o)
 			}
 		case *types.Func:
 			if !c.excludeFunctions {
-				a.alias.Functions = append(a.alias.Functions, o)
+				a.alias.AddFunctions(o)
 			}
 		case *types.TypeName:
 			if !c.excludeTypes {
-				a.alias.Types = append(a.alias.Types, o)
+				a.alias.AddTypes(o)
 			}
 		default: // should never happen
 			return fmt.Errorf("unexpected object type for %s: %T", o.Name(), o)
 		}
 	}
 	return nil
-}
-
-// Alias is the type used as the data for the template execution. It contains
-// the configuration used to define the target package and the list of
-// exported constants, variables, functions, and types in the loaded package.
-type Alias struct {
-	*Config
-
-	// SrcPkgName is the name of the loaded package.
-	//
-	// Example: "pkg"
-	SrcPkgName string
-
-	// SrcPkgPath is the path of the loaded package.
-	//
-	// Example: "github.com/marcozac/go-aliaser/internal/testing/pkg"
-	SrcPkgPath string
-
-	// Constants is the list of exported constants in the loaded package.
-	Constants []*types.Const
-
-	// Variables is the list of exported variables in the loaded package.
-	Variables []*types.Var
-
-	// Functions is the list of exported functions in the loaded package.
-	Functions []*types.Func
-
-	// Types is the list of exported types in the loaded package.
-	Types []*types.TypeName
 }
 
 // Config is the configuration used to define the target package. It is
@@ -217,6 +192,13 @@ type config struct {
 	excludeFunctions bool
 	excludeTypes     bool
 	excludedNames    map[string]struct{}
+	wrapFunctions    bool
+}
+
+// WrapFunctions returns whether the aliases for the functions should be
+// wrapped instead of assigned to a variable.
+func (c *config) WrapFunctions() bool {
+	return c.wrapFunctions
 }
 
 func defaultConfig(target, pattern string) *Config {
@@ -227,6 +209,7 @@ func defaultConfig(target, pattern string) *Config {
 			pattern:       pattern,
 			ctx:           context.Background(),
 			excludedNames: make(map[string]struct{}),
+			wrapFunctions: true,
 		},
 	}
 }
@@ -293,5 +276,13 @@ func ExcludeNames(names ...string) Option {
 		for _, n := range names {
 			c.excludedNames[n] = struct{}{}
 		}
+	})
+}
+
+// WrapFunctions sets whether the aliases for the functions should be wrapped
+// instead of assigned to a variable.
+func WrapFunctions(v bool) Option {
+	return option(func(c *Config) {
+		c.wrapFunctions = v
 	})
 }

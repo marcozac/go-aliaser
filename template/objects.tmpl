@@ -1,30 +1,38 @@
-{{ define "objects" }}
-{{- range $c := $ }}
-	{{ $c.Name }} = {{ $c.Pkg.Name }}.{{ $c.Name }}
+{{ define "simple_objects" }}
+{{- range $o := $ }}
+	{{ $o.Name }} = {{ $o.PackageAlias }}.{{ $o.Name }}
 {{- end }}
 {{- end }}
 
 {{ define "constants" }}
 const (
-	{{- template "objects" . }}
+	{{- template "simple_objects" $.Constants }}
 )
 {{- end }}
 
 {{ define "variables" }}
 var (
-	{{- template "objects" . }}
+	{{- template "simple_objects" $.Variables }}
 )
 {{- end }}
 
 {{ define "functions" }}
+{{ if $.WrapFunctions }}
+{{ range $o := $.Functions }}
+func {{ $o.Name }} {{ $o.WriteSignature }} {
+	{{ if $o.Returns }} return {{ end }}{{ $o.PackageAlias }}.{{ $o.Name }}({{ $o.CallArgs }})
+}
+{{ end }}
+{{ else }}
 // Functions
 var (
-	{{- template "objects" . }}
+	{{- template "simple_objects" $.Functions }}
 )
+{{- end }}
 {{- end }}
 
 {{ define "types" }}
 type (
-	{{- template "objects" . }}
+	{{- template "simple_objects" $.Types }}
 )
 {{- end }}
