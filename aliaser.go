@@ -41,14 +41,23 @@ type Aliaser struct {
 	mu sync.RWMutex
 }
 
-// New returns a new [Aliaser] with the given target and pattern.
+// New returns a new [Aliaser] with the given configuration.
+// The configuration is required and must have a valid target package and
+// pattern. Otherwise, a [ErrNilConfig], [ErrEmptyTarget] or [ErrEmptyPattern]
+// will be returned. See [Config] for more details.
 //
-// The target is the name of the package where the aliases will be generated
-// and the pattern must be a valid package pattern in Go format.
+// New may also return an error in these cases:
+//   - Package loading fails
+//   - The package has errors
+//   - More or less than one package is loaded with the given pattern
+//   - The loaded package has an unexpected object type
 //
 // Example:
 //
-//	a, err := New("foo", "github.com/marcozac/go-aliaser/internal/testing/pkg")
+//	a, err := aliaser.New(&aliaser.Config{
+//		TargetPackage: "foo",
+//		Pattern: "github.com/example/package",
+//	})
 //	if err != nil {
 //		// ...
 //	}
@@ -84,6 +93,58 @@ func New(c *Config, opts ...Option) (*Aliaser, error) {
 	return a, nil
 }
 
+const loadMode = packages.NeedName | packages.NeedTypes
+
+func (a *Aliaser) load() error {
+	pkgs, err := packages.Load(&packages.Config{Mode: loadMode, Context: a.ctx}, a.Pattern)
+	if err != nil {
+		return fmt.Errorf("load packages: %w", err)
+	}
+	if len(pkgs) != 1 {
+		return fmt.Errorf("expected one package, got %d", len(pkgs))
+	}
+	pkg := pkgs[0]
+	if errs := pkg.Errors; len(errs) > 0 {
+		return fmt.Errorf("package errors: %w", PackagesErrors(errs))
+	}
+	return a.setAlias(pkg)
+}
+
+func (a *Aliaser) setAlias(pkg *packages.Package) error {
+	a.AddImport(pkg.Types)
+	scope := pkg.Types.Scope()
+	for _, name := range pkg.Types.Scope().Names() {
+		o := scope.Lookup(name)
+		if !o.Exported() {
+			continue
+		}
+		if _, ok := a.excludedNames[o.Name()]; ok {
+			continue
+		}
+		switch o := o.(type) {
+		case *types.Const:
+			if !a.excludeConstants {
+				a.AddConstants(o)
+			}
+		case *types.Var:
+			if !a.excludeVariables {
+				a.AddVariables(o)
+			}
+		case *types.Func:
+			if !a.excludeFunctions {
+				a.AddFunctions(o)
+			}
+		case *types.TypeName:
+			if !a.excludeTypes {
+				a.AddTypes(o)
+			}
+		default: // should never happen
+			return fmt.Errorf("unexpected object type for %s: %T", o.Name(), o)
+		}
+	}
+	return nil
+}
+
 // Generate writes the aliases to the given writer.
 //
 // Generate returns an error if fails to execute the template, format the
@@ -106,8 +167,8 @@ func (a *Aliaser) Generate(wr io.Writer) error {
 }
 
 // GenerateFile behaves like [Aliaser.Generate], but it writes the aliases to
-// the file with the given name. It creates the necessary directories if they
-// don't exist. If the file already exists, it is truncated.
+// the file with the given name creating the necessary directories. If the file
+// already exists, it is truncated.
 //
 // GenerateFile returns an error in the same cases as [Aliaser.Generate] and
 // if any of the directory creation or file writing operations fail.
@@ -253,58 +314,6 @@ func (a *Aliaser) AddTypes(ts ...*types.TypeName) {
 func (a *Aliaser) addType(t *types.TypeName) {
 	a.AddImport(t.Pkg())
 	a.types = append(a.types, NewTypeName(t, a.Importer))
-}
-
-const loadMode = packages.NeedName | packages.NeedTypes
-
-func (a *Aliaser) load() error {
-	pkgs, err := packages.Load(&packages.Config{Mode: loadMode, Context: a.ctx}, a.Pattern)
-	if err != nil {
-		return fmt.Errorf("load packages: %w", err)
-	}
-	if len(pkgs) != 1 {
-		return fmt.Errorf("expected one package, got %d", len(pkgs))
-	}
-	pkg := pkgs[0]
-	if errs := pkg.Errors; len(errs) > 0 {
-		return fmt.Errorf("package errors: %w", PackagesErrors(errs))
-	}
-	return a.setAlias(pkg)
-}
-
-func (a *Aliaser) setAlias(pkg *packages.Package) error {
-	a.AddImport(pkg.Types)
-	scope := pkg.Types.Scope()
-	for _, name := range pkg.Types.Scope().Names() {
-		o := scope.Lookup(name)
-		if !o.Exported() {
-			continue
-		}
-		if _, ok := a.excludedNames[o.Name()]; ok {
-			continue
-		}
-		switch o := o.(type) {
-		case *types.Const:
-			if !a.excludeConstants {
-				a.AddConstants(o)
-			}
-		case *types.Var:
-			if !a.excludeVariables {
-				a.AddVariables(o)
-			}
-		case *types.Func:
-			if !a.excludeFunctions {
-				a.AddFunctions(o)
-			}
-		case *types.TypeName:
-			if !a.excludeTypes {
-				a.AddTypes(o)
-			}
-		default: // should never happen
-			return fmt.Errorf("unexpected object type for %s: %T", o.Name(), o)
-		}
-	}
-	return nil
 }
 
 // Config is the configuration used to define the target package.

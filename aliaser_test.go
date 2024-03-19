@@ -67,6 +67,11 @@ func TestAliaserOptions(t *testing.T) {
 }
 
 func TestAliaserError(t *testing.T) {
+	// EmptyTarget and EmptyPattern are covered in the TestGenerate* tests
+	t.Run("NilConfig", func(t *testing.T) {
+		_, err := New(nil)
+		assert.ErrorIs(t, err, ErrNilConfig)
+	})
 	t.Run("InvalidPattern", func(t *testing.T) {
 		_, err := New(&Config{TargetPackage: TestTarget, Pattern: "golang.org/x/tools/go/*"})
 		assert.Error(t, err)
