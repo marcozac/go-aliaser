@@ -41,7 +41,7 @@ func EnableRandPool() {
 	uuid.EnableRandPool()
 }
 
-func FromBytes(b []byte) (_uuid uuid.UUID, err error) {
+func FromBytes(b []byte) (uuid_ uuid.UUID, err error) {
 	return uuid.FromBytes(b)
 }
 
@@ -53,8 +53,8 @@ func IsInvalidLengthError(err error) bool {
 	return uuid.IsInvalidLengthError(err)
 }
 
-func Must(_uuid uuid.UUID, err error) uuid.UUID {
-	return uuid.Must(_uuid, err)
+func Must(uuid_ uuid.UUID, err error) uuid.UUID {
+	return uuid.Must(uuid_, err)
 }
 
 func MustParse(s string) uuid.UUID {
