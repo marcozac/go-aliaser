@@ -19,7 +19,7 @@ var (
 {{ define "functions" }}
 {{ if $.WrapFunctions }}
 {{ range $o := $.Functions }}
-func {{ $o.Name }} {{ $o.Signature }} {
+func {{ $o.Name }} {{ $o.WriteSignature }} {
 	{{ if $o.Returns }} return {{ end }}{{ $o.PackageAlias }}.{{ $o.Name }}({{ $o.CallArgs }})
 }
 {{ end }}

@@ -3,10 +3,10 @@ package aliaser
 import (
 	"bytes"
 	"go/types"
-	"slices"
 	"strings"
 
 	"github.com/marcozac/go-aliaser/importer"
+	"github.com/marcozac/go-aliaser/util/sequence"
 )
 
 var _ Object = (*Const)(nil)
@@ -58,10 +58,11 @@ func NewFunc(fn *types.Func, imp *importer.Importer) *Func {
 	return &Func{fn, newObjectResolver(fn, imp), NewSignature(fn.Type().(*types.Signature), imp)}
 }
 
-// Signature returns the signature of the function as a string. It is a wrapper
+// WriteSignature returns the signature of the function as a string. It is a wrapper
 // around [types.WriteSignature] that uses a custom [types.Qualifier] to resolve
-// the package aliases.
-func (fn *Func) Signature() string {
+// the package aliases. The signature is wrapped by [Signature.Wrapper] to replace
+// the parameter and result names on conflict with the package aliases.
+func (fn *Func) WriteSignature() string {
 	buf := new(bytes.Buffer)
 	types.WriteSignature(buf, fn.tsig.Wrapper(), fn.qualifier())
 	return buf.String()
@@ -80,13 +81,13 @@ func (fn *Func) CallArgs() string {
 	if l == 0 {
 		return ""
 	}
-	names := make([]string, 0, l)
-	WalkTupleVars(params, func(pv *types.Var) {
-		names = append(names, pv.Name())
-	})
-	if fn.tsig.Variadic() {
-		names[l-1] += "..."
-	}
+	names := sequence.New(params.Len, func(i int) string { return params.At(i).Name() }).
+		SliceFuncIndex(func(s string, i int) string {
+			if i == l-1 && fn.tsig.Variadic() {
+				return s + "..."
+			}
+			return s
+		})
 	return strings.Join(names, ", ")
 }
 
@@ -152,30 +153,40 @@ func (o *objectResolver) importType(typ types.Type) {
 	case interface{ Elem() types.Type }: // *types.Array, *types.Slice, *types.Chan, *types.Pointer
 		o.importType(typ.Elem())
 	case *types.Signature:
-		o.importType(typ.Params())
-		o.importType(typ.Results())
-	case *types.Tuple:
-		WalkTupleVars(typ, o.varImporter())
+		// do not call o.importType(typ.Params()) and o.importType(typ.Results())
+		// to avoid unnecessaty type switches
+		sequence.FromSequenceable(typ.Params()).
+			ForEach(o.varImporter)
+		sequence.FromSequenceable(typ.Results()).
+			ForEach(o.varImporter)
+	/*
+		// tuples appear only in signatures, which are already handled
+		case *types.Tuple:
+			sequence.FromSequenceable(typ).
+				ForEach(o.varImporter)
+	*/
 	case *types.Struct:
-		WalkStructFields(typ, o.varImporter())
+		sequence.New(typ.NumFields, typ.Field).
+			ForEach(o.varImporter)
 	case *types.Interface:
-		WalkInterfaceMethods(typ, o.funcImporter())
-		WalkInterfaceEmbeddeds(typ, o.importType)
+		sequence.New(typ.NumMethods, typ.Method).
+			ForEach(o.funcImporter)
+		sequence.New(typ.NumEmbeddeds, typ.EmbeddedType).
+			ForEach(o.importType)
 	}
 }
 
-func (o *objectResolver) varImporter() func(pv *types.Var) {
-	return func(pv *types.Var) {
-		o.imp.AddImport(pv.Pkg())
-		o.importType(pv.Type())
-	}
+func (o *objectResolver) varImporter(pv *types.Var) {
+	o.importObject(pv)
 }
 
-func (o *objectResolver) funcImporter() func(*types.Func) {
-	return func(fn *types.Func) {
-		o.imp.AddImport(fn.Pkg())
-		o.importType(fn.Type())
-	}
+func (o *objectResolver) funcImporter(fn *types.Func) {
+	o.importObject(fn)
+}
+
+func (o *objectResolver) importObject(pt PackageTyper) {
+	o.imp.AddImport(pt.Pkg())
+	o.importType(pt.Type())
 }
 
 // Object extends the [types.Object] interface with methods to get the package
@@ -184,6 +195,13 @@ type Object interface {
 	types.Object
 	PackageAliaser
 	TypeStringer
+}
+
+// PackageTyper is a subset of the [types.Object] interface that provides
+// methods to get the package and the type of the object.
+type PackageTyper interface {
+	Pkg() *types.Package
+	Type() types.Type
 }
 
 // PackageAliaser is the interface implemented by types that can provide the
@@ -199,95 +217,4 @@ type PackageAliaser interface {
 type TypeStringer interface {
 	// TypeString returns the type of the implementing type as a string.
 	TypeString() string
-}
-
-// WalkTupleVars calls the given function for each variable in the given tuple.
-func WalkTupleVars(tp *types.Tuple, fn func(*types.Var)) {
-	for i := 0; i < tp.Len(); i++ {
-		fn(tp.At(i))
-	}
-}
-
-// WalkStructFields calls the given function for each field in the given struct.
-func WalkStructFields(st *types.Struct, fn func(*types.Var)) {
-	for i := 0; i < st.NumFields(); i++ {
-		fn(st.Field(i))
-	}
-}
-
-// WalkInterfaceMethods calls the given function for each method in the given
-// interface.
-func WalkInterfaceMethods(iface *types.Interface, fn func(*types.Func)) {
-	for i := 0; i < iface.NumMethods(); i++ {
-		fn(iface.Method(i))
-	}
-}
-
-// WalkInterfaceEmbeddeds calls the given function for each embedded type in the
-// given interface.
-func WalkInterfaceEmbeddeds(iface *types.Interface, fn func(types.Type)) {
-	for i := 0; i < iface.NumEmbeddeds(); i++ {
-		fn(iface.EmbeddedType(i))
-	}
-}
-
-type Signature struct {
-	*types.Signature
-	imp *importer.Importer
-}
-
-func NewSignature(sig *types.Signature, imp *importer.Importer) *Signature {
-	return &Signature{sig, imp}
-}
-
-func (s *Signature) Wrapper() *types.Signature {
-	ai := s.imp.AliasedImports()
-	aliases := make([]string, 0, len(ai))
-	for _, alias := range ai {
-		aliases = append(aliases, alias)
-	}
-	params := make([]*types.Var, 0, s.Params().Len())
-	WalkTupleVars(s.Params(), func(pv *types.Var) {
-		if slices.Contains(aliases, pv.Name()) {
-			params = append(params, types.NewVar(pv.Pos(), pv.Pkg(), "_"+pv.Name(), pv.Type()))
-		} else {
-			params = append(params, pv)
-		}
-	})
-	results := make([]*types.Var, 0, s.Results().Len())
-	WalkTupleVars(s.Results(), func(pv *types.Var) {
-		if slices.Contains(aliases, pv.Name()) {
-			results = append(results, types.NewVar(pv.Pos(), pv.Pkg(), "_"+pv.Name(), pv.Type()))
-		} else {
-			results = append(results, pv)
-		}
-	})
-	rtp := s.RecvTypeParams()
-	tp := s.TypeParams()
-	return types.NewSignatureType(
-		s.Recv(),
-		NewIterableType(rtp.Len, rtp.At).Slice(),
-		NewIterableType(tp.Len, tp.At).Slice(),
-		types.NewTuple(params...),
-		types.NewTuple(results...),
-		s.Variadic(),
-	)
-}
-
-type IterableType[T any] struct {
-	len func() int
-	get func(int) T
-}
-
-func NewIterableType[T any](len func() int, get func(int) T) *IterableType[T] {
-	return &IterableType[T]{len, get}
-}
-
-func (it *IterableType[T]) Slice() []T {
-	l := it.len()
-	slice := make([]T, l)
-	for i := 0; i < l; i++ {
-		slice[i] = it.get(i)
-	}
-	return slice
 }
