@@ -9,10 +9,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"text/template"
 
 	"github.com/marcozac/go-aliaser/importer"
+	"github.com/marcozac/go-aliaser/util/set"
 	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/imports"
 )
@@ -38,7 +40,8 @@ type Aliaser struct {
 	// Types is the list of exported types in the loaded package.
 	types []*TypeName
 
-	mu sync.RWMutex
+	names *set.Set[string, objectId]
+	mu    sync.RWMutex
 }
 
 // New returns a new [Aliaser] with the given configuration.
@@ -83,9 +86,9 @@ func New(c *Config, opts ...Option) (*Aliaser, error) {
 		return nil, ErrEmptyPattern
 	}
 	a := &Aliaser{
-		Config: c.setDefaults().
-			applyOptions(opts...),
+		Config:   c.setDefaults().applyOptions(opts...),
 		Importer: importer.New(),
+		names:    set.New[string, objectId](),
 	}
 	if err := a.load(); err != nil {
 		return nil, err
@@ -107,10 +110,10 @@ func (a *Aliaser) load() error {
 	if errs := pkg.Errors; len(errs) > 0 {
 		return fmt.Errorf("package errors: %w", PackagesErrors(errs))
 	}
-	return a.setAlias(pkg)
+	return a.addPkgObjects(pkg)
 }
 
-func (a *Aliaser) setAlias(pkg *packages.Package) error {
+func (a *Aliaser) addPkgObjects(pkg *packages.Package) error {
 	a.AddImport(pkg.Types)
 	scope := pkg.Types.Scope()
 	for _, name := range pkg.Types.Scope().Names() {
@@ -145,59 +148,7 @@ func (a *Aliaser) setAlias(pkg *packages.Package) error {
 	return nil
 }
 
-// Generate writes the aliases to the given writer.
-//
-// Generate returns an error if fails to execute the template, format the
-// generated code, or write the result to the writer.
-func (a *Aliaser) Generate(wr io.Writer) error {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	buf := new(bytes.Buffer)
-	if err := a.executeTemplate(buf); err != nil {
-		return err
-	}
-	data, err := imports.Process("", buf.Bytes(), nil)
-	if err != nil {
-		return fmt.Errorf("format: %w", err)
-	}
-	if _, err := wr.Write(data); err != nil {
-		return fmt.Errorf("write: %w", err)
-	}
-	return nil
-}
-
-// GenerateFile behaves like [Aliaser.Generate], but it writes the aliases to
-// the file with the given name creating the necessary directories. If the file
-// already exists, it is truncated.
-//
-// GenerateFile returns an error in the same cases as [Aliaser.Generate] and
-// if any of the directory creation or file writing operations fail.
-func (a *Aliaser) GenerateFile(name string) error {
-	// TODO: keep a backup and restore in case of failure
-	if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
-		return fmt.Errorf("create directory: %w", err)
-	}
-	f, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o644)
-	if err != nil {
-		return fmt.Errorf("open file: %w", err)
-	}
-	defer f.Close()
-	return a.Generate(f)
-}
-
-func (a *Aliaser) executeTemplate(buf *bytes.Buffer) error {
-	tmpl, err := template.ParseFS(tmplFS, "template/*.tmpl")
-	if err != nil {
-		return fmt.Errorf("parse template: %w", err)
-	}
-	if err := tmpl.ExecuteTemplate(buf, "alias", a); err != nil {
-		return fmt.Errorf("execute template: %w", err)
-	}
-	return nil
-}
-
 // Constants returns the list of the constants loaded for aliasing.
-// It is safe for concurrent use.
 func (a *Aliaser) Constants() []*Const {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -206,7 +157,6 @@ func (a *Aliaser) Constants() []*Const {
 
 // AddConstants adds the given constants to the list of the constants to
 // generate aliases for.
-// It is safe for concurrent use.
 //
 // NOTE:
 // Currently, the Aliaser does not perform any check to avoid adding the same
@@ -222,12 +172,13 @@ func (a *Aliaser) AddConstants(cs ...*types.Const) {
 }
 
 func (a *Aliaser) addConstant(c *types.Const) {
-	a.AddImport(c.Pkg())
-	a.constants = append(a.constants, NewConst(c, a.Importer))
+	if !a.addObjectName(c, constantId) {
+		a.constants = append(a.constants, NewConst(c, a.Importer))
+		a.AddImport(c.Pkg())
+	}
 }
 
 // Variables returns the list of the variables loaded for aliasing.
-// It is safe for concurrent use.
 func (a *Aliaser) Variables() []*Var {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -236,13 +187,6 @@ func (a *Aliaser) Variables() []*Var {
 
 // AddVariables adds the given variables to the list of the variables to
 // generate aliases for.
-// It is safe for concurrent use.
-//
-// NOTE:
-// Currently, the Aliaser does not perform any check to avoid adding the same
-// variable or any other object with the same name more than once. Adding a
-// variable with the same name of another object will result in a non-buildable
-// generated code.
 func (a *Aliaser) AddVariables(vs ...*types.Var) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -252,12 +196,13 @@ func (a *Aliaser) AddVariables(vs ...*types.Var) {
 }
 
 func (a *Aliaser) addVariable(v *types.Var) {
-	a.AddImport(v.Pkg())
-	a.variables = append(a.variables, NewVar(v, a.Importer))
+	if !a.addObjectName(v, variableId) {
+		a.AddImport(v.Pkg())
+		a.variables = append(a.variables, NewVar(v, a.Importer))
+	}
 }
 
 // Functions returns the list of the functions loaded for aliasing.
-// It is safe for concurrent use.
 func (a *Aliaser) Functions() []*Func {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -266,13 +211,6 @@ func (a *Aliaser) Functions() []*Func {
 
 // AddFunctions adds the given functions to the list of the functions to
 // generate aliases for.
-// It is safe for concurrent use.
-//
-// NOTE:
-// Currently, the Aliaser does not perform any check to avoid adding the same
-// function or any other object with the same name more than once. Adding a
-// function with the same name of another object will result in a non-buildable
-// generated code.
 func (a *Aliaser) AddFunctions(fns ...*types.Func) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -282,12 +220,13 @@ func (a *Aliaser) AddFunctions(fns ...*types.Func) {
 }
 
 func (a *Aliaser) addFunction(fn *types.Func) {
-	a.AddImport(fn.Pkg())
-	a.functions = append(a.functions, NewFunc(fn, a.Importer))
+	if !a.addObjectName(fn, functionId) {
+		a.AddImport(fn.Pkg())
+		a.functions = append(a.functions, NewFunc(fn, a.Importer))
+	}
 }
 
 // Types returns the list of the types loaded for aliasing.
-// It is safe for concurrent use.
 func (a *Aliaser) Types() []*TypeName {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -296,13 +235,6 @@ func (a *Aliaser) Types() []*TypeName {
 
 // AddTypes adds the given types to the list of the types to generate aliases
 // for.
-// It is safe for concurrent use.
-//
-// NOTE:
-// Currently, the Aliaser does not perform any check to avoid adding the same
-// type or any other object with the same name more than once. Adding a type
-// with the same name of another object will result in a non-buildable generated
-// code.
 func (a *Aliaser) AddTypes(ts ...*types.TypeName) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -312,8 +244,120 @@ func (a *Aliaser) AddTypes(ts ...*types.TypeName) {
 }
 
 func (a *Aliaser) addType(t *types.TypeName) {
-	a.AddImport(t.Pkg())
-	a.types = append(a.types, NewTypeName(t, a.Importer))
+	if !a.addObjectName(t, typeId) {
+		a.AddImport(t.Pkg())
+		a.types = append(a.types, NewTypeName(t, a.Importer))
+	}
+}
+
+// objectId is the type used to identify the kind of object.
+type objectId int
+
+const (
+	_ objectId = iota
+	constantId
+	variableId
+	functionId
+	typeId
+)
+
+func (a *Aliaser) addObjectName(o types.Object, id objectId) (skip bool) {
+	if a.names.PutNX(o.Name(), id) {
+		return
+	}
+	switch a.onDuplicate {
+	case OnDuplicateSkip:
+		return true
+	case OnDuplicateReplace:
+		oldID := a.names.Swap(o.Name(), id)
+		a.deleteObject(o, oldID)
+	case OnDuplicatePanic:
+		panic(fmt.Errorf("duplicate object name: %s", o.Name()))
+	default: // should never happen, trap for development
+		panic(fmt.Errorf("unexpected OnDuplicate value: %d", a.onDuplicate))
+	}
+	return
+}
+
+func (a *Aliaser) deleteObject(o types.Object, id objectId) {
+	switch id {
+	case constantId:
+		a.constants = slices.DeleteFunc(a.constants, newObjSliceDel[*Const](o))
+	case variableId:
+		a.variables = slices.DeleteFunc(a.variables, newObjSliceDel[*Var](o))
+	case functionId:
+		a.functions = slices.DeleteFunc(a.functions, newObjSliceDel[*Func](o))
+	case typeId:
+		a.types = slices.DeleteFunc(a.types, newObjSliceDel[*TypeName](o))
+	default: // should never happen, trap for development
+		panic(fmt.Errorf("unexpected object ID: %d", id))
+	}
+}
+
+// newObjSliceDel returns a function, compatible with the signature of the
+// [slices.DeleteFunc], that returns true if the given object (the one that
+// will be deleted) has the same name of the one used to create the function.
+func newObjSliceDel[O types.Object](obj types.Object) func(O) bool {
+	return func(o O) bool {
+		return obj.Name() == o.Name()
+	}
+}
+
+// Generate writes the aliases to the given writer.
+//
+// Generate returns an error if fails to execute the template, format the
+// generated code, or write the result to the writer.
+func (a *Aliaser) Generate(wr io.Writer) error {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.generate(wr)
+}
+
+// GenerateFile behaves like [Aliaser.Generate], but it writes the aliases to
+// the file with the given name creating the necessary directories. If the file
+// already exists, it is truncated.
+//
+// GenerateFile returns an error in the same cases as [Aliaser.Generate] and
+// if any of the directory creation or file writing operations fail.
+func (a *Aliaser) GenerateFile(name string) error {
+	// TODO: keep a backup and restore in case of failure
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
+		return fmt.Errorf("create directory: %w", err)
+	}
+	f, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o644)
+	if err != nil {
+		return fmt.Errorf("open file: %w", err)
+	}
+	defer f.Close()
+	return a.Generate(f)
+}
+
+func (a *Aliaser) generate(wr io.Writer) error {
+	buf := new(bytes.Buffer)
+	if err := a.executeTemplate(buf); err != nil {
+		return err
+	}
+	data, err := imports.Process("", buf.Bytes(), nil)
+	if err != nil {
+		return fmt.Errorf("format: %w", err)
+	}
+	if _, err := wr.Write(data); err != nil {
+		return fmt.Errorf("write: %w", err)
+	}
+	return nil
+}
+
+func (a *Aliaser) executeTemplate(buf *bytes.Buffer) error {
+	tmpl, err := template.ParseFS(tmplFS, "template/*.tmpl")
+	if err != nil {
+		return fmt.Errorf("parse template: %w", err)
+	}
+	if err := tmpl.ExecuteTemplate(buf, "alias", a); err != nil {
+		return fmt.Errorf("execute template: %w", err)
+	}
+	return nil
 }
 
 // Config is the configuration used to define the target package.
@@ -370,6 +414,7 @@ type config struct {
 	excludeFunctions bool
 	excludeTypes     bool
 	excludedNames    map[string]struct{}
+	onDuplicate      int
 }
 
 // Option is the interface implemented by all options.
@@ -442,5 +487,25 @@ func ExcludeNames(names ...string) Option {
 func AssignFunctions(v bool) Option {
 	return option(func(c *Config) {
 		c.AssignFunctions = v
+	})
+}
+
+const (
+	// OnDuplicateSkip is the default behavior when a duplicate object name is
+	// found. It skips the object and does not generate an alias for it.
+	OnDuplicateSkip = iota
+
+	// OnDuplicateReplace replaces the old object (even if it is a different
+	// kind of object) with the new one.
+	OnDuplicateReplace
+
+	// OnDuplicatePanic panics when a duplicate object name is found.
+	OnDuplicatePanic
+)
+
+// OnDuplicate sets the behavior when a duplicate object name is found.
+func OnDuplicate(v int) Option {
+	return option(func(c *Config) {
+		c.onDuplicate = v
 	})
 }

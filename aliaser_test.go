@@ -8,12 +8,25 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
+	"github.com/marcozac/go-aliaser/util/sequence"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/tools/go/packages"
 )
+
+func TestSetAlias(t *testing.T) {
+	t.Run("NotExportedObject", AliaserTest(func(t *testing.T, a *Aliaser) {
+		LoadedPackageHelper(t, func(t *testing.T, p *packages.Package) {
+			p.Types.Scope().Insert(
+				types.NewConst(0, p.Types, "notExported", types.Typ[types.Uint8], nil),
+			)
+			assert.NoError(t, a.addPkgObjects(p)) // cover not exported object
+		})
+	}))
+}
 
 func TestAliaserOptions(t *testing.T) {
 	t.Run("WithContext", func(t *testing.T) {
@@ -64,6 +77,50 @@ func TestAliaserOptions(t *testing.T) {
 			assert.Contains(t, buf.String(), "func J(")
 		}, AssignFunctions(false)))
 	})
+	t.Run("OnDuplicate", func(t *testing.T) {
+		t.Run("Skip", AliaserTest(func(t *testing.T, a *Aliaser) {
+			v0 := a.variables[0]
+			a.AddVariables(types.NewVar(0, v0.Pkg(), "A", types.Typ[types.Uint8]))
+			assert.False(t, slices.ContainsFunc(a.variables, func(c *Var) bool { return c.Name() == "A" }))
+		}, OnDuplicate(OnDuplicateSkip)))
+		t.Run("Replace", AliaserTest(func(t *testing.T, a *Aliaser) {
+			pkg := a.variables[0].Pkg()
+			assert.True(t, slices.ContainsFunc(a.constants, func(c *Const) bool { return c.Name() == "A" }))
+
+			a.AddVariables(types.NewVar(0, pkg, "A", types.Typ[types.Uint8]))
+			assert.False(t, slices.ContainsFunc(a.constants, func(c *Const) bool { return c.Name() == "A" }))
+			assert.True(t, slices.ContainsFunc(a.variables, func(c *Var) bool { return c.Name() == "A" }))
+
+			a.AddConstants(types.NewConst(0, pkg, "A", types.Typ[types.Uint8], nil))
+			assert.False(t, slices.ContainsFunc(a.variables, func(c *Var) bool { return c.Name() == "A" }))
+			assert.True(t, slices.ContainsFunc(a.constants, func(c *Const) bool { return c.Name() == "A" }))
+
+			f0 := a.functions[0]
+			a.AddFunctions(types.NewFunc(0, pkg, "A", types.NewSignatureType(
+				f0.tsig.Recv(),
+				sequence.FromSequenceable(f0.tsig.RecvTypeParams()).Slice(),
+				sequence.FromSequenceable(f0.tsig.TypeParams()).Slice(),
+				f0.tsig.Params(),
+				f0.tsig.Results(),
+				f0.tsig.Variadic(),
+			)))
+			assert.False(t, slices.ContainsFunc(a.constants, func(c *Const) bool { return c.Name() == "A" }))
+			assert.True(t, slices.ContainsFunc(a.functions, func(c *Func) bool { return c.Name() == "A" }))
+
+			a.AddTypes(types.NewTypeName(0, pkg, "A", types.Typ[types.Uint8]))
+			assert.False(t, slices.ContainsFunc(a.functions, func(c *Func) bool { return c.Name() == "A" }))
+			assert.True(t, slices.ContainsFunc(a.types, func(c *TypeName) bool { return c.Name() == "A" }))
+
+			// replace the type
+			a.AddConstants(types.NewConst(0, pkg, "A", types.Typ[types.Uint8], nil))
+			assert.False(t, slices.ContainsFunc(a.types, func(c *TypeName) bool { return c.Name() == "A" }))
+			assert.True(t, slices.ContainsFunc(a.constants, func(c *Const) bool { return c.Name() == "A" }))
+		}, OnDuplicate(OnDuplicateReplace)))
+		t.Run("Panic", AliaserTest(func(t *testing.T, a *Aliaser) {
+			v0 := a.variables[0]
+			assert.Panics(t, func() { a.AddVariables(types.NewVar(0, v0.Pkg(), "A", types.Typ[types.Uint8])) })
+		}, OnDuplicate(OnDuplicatePanic)))
+	})
 }
 
 func TestAliaserError(t *testing.T) {
@@ -85,6 +142,14 @@ func TestAliaserError(t *testing.T) {
 		_, err := New(&Config{TargetPackage: TestTarget, Pattern: TestPattern})
 		assert.Error(t, err)
 	})
+	t.Run("ObjectTypeError", AliaserTest(func(t *testing.T, a *Aliaser) {
+		LoadedPackageHelper(t, func(t *testing.T, p *packages.Package) {
+			p.Types.Scope().Insert(
+				types.NewLabel(0, p.Types, "MyLabel"),
+			)
+			assert.Error(t, a.addPkgObjects(p))
+		})
+	}))
 	t.Run("ParseTemplate", func(t *testing.T) {
 		oldFS := tmplFS
 		defer func() { tmplFS = oldFS }()
@@ -115,24 +180,14 @@ func TestAliaserError(t *testing.T) {
 			assert.Error(t, a.GenerateFile(filepath.Join(nwDir, "alias.go")))
 		})
 	}))
-}
-
-func TestSetAlias(t *testing.T) {
-	t.Run("NotExportedObject", AliaserTest(func(t *testing.T, a *Aliaser) {
-		LoadedPackageHelper(t, func(t *testing.T, p *packages.Package) {
-			p.Types.Scope().Insert(
-				types.NewConst(0, p.Types, "notExported", types.Typ[types.Uint8], nil),
-			)
-			assert.NoError(t, a.setAlias(p)) // cover not exported object
-		})
+	t.Run("addObjectName", AliaserTest(func(t *testing.T, a *Aliaser) {
+		a.onDuplicate = 10
+		v := types.NewVar(0, a.variables[0].Pkg(), "A", types.Typ[types.Uint8])
+		assert.Panics(t, func() { a.addObjectName(v, 10) })
 	}))
-	t.Run("ObjectTypeError", AliaserTest(func(t *testing.T, a *Aliaser) {
-		LoadedPackageHelper(t, func(t *testing.T, p *packages.Package) {
-			p.Types.Scope().Insert(
-				types.NewLabel(0, p.Types, "MyLabel"),
-			)
-			assert.Error(t, a.setAlias(p))
-		})
+	t.Run("deleteObject", AliaserTest(func(t *testing.T, a *Aliaser) {
+		v := types.NewVar(0, a.variables[0].Pkg(), "A", types.Typ[types.Uint8])
+		assert.Panics(t, func() { a.deleteObject(v, 10) })
 	}))
 }
 

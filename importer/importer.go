@@ -103,9 +103,6 @@ func (imp *Importer) AliasedImports() map[string]string {
 }
 
 func (imp *Importer) aliasImports() {
-	if !imp.toAlias.CompareAndSwap(true, false) {
-		return
-	}
 	paths := maps.Keys(imp.imports)
 	slices.Sort(paths)
 	aliases := make([]string, 0, len(paths))
