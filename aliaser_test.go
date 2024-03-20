@@ -8,78 +8,148 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
+	"github.com/marcozac/go-aliaser/util/sequence"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/tools/go/packages"
 )
 
+func TestSetAlias(t *testing.T) {
+	t.Run("NotExportedObject", AliaserTest(func(t *testing.T, a *Aliaser) {
+		LoadedPackageHelper(t, func(t *testing.T, p *packages.Package) {
+			p.Types.Scope().Insert(
+				types.NewConst(0, p.Types, "notExported", types.Typ[types.Uint8], nil),
+			)
+			assert.NoError(t, a.addPkgObjects(p)) // cover not exported object
+		})
+	}))
+}
+
 func TestAliaserOptions(t *testing.T) {
 	t.Run("WithContext", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		_, err := New(TestTarget, TestPattern, WithContext(ctx))
+		_, err := New(&Config{TargetPackage: TestTarget, Pattern: TestPattern}, WithContext(ctx))
 		assert.Error(t, err)
 	})
 	t.Run("ExcludeConstants", AliaserTest(func(t *testing.T, a *Aliaser) {
-		assert.Empty(t, a.alias.Constants)
+		assert.Empty(t, a.Constants())
 	}, ExcludeConstants()))
 	t.Run("ExcludeVariables", AliaserTest(func(t *testing.T, a *Aliaser) {
-		assert.Empty(t, a.alias.Variables)
+		assert.Empty(t, a.Variables())
 	}, ExcludeVariables()))
 	t.Run("ExcludeFunctions", AliaserTest(func(t *testing.T, a *Aliaser) {
-		assert.Empty(t, a.alias.Functions)
+		assert.Empty(t, a.Functions())
 	}, ExcludeFunctions()))
 	t.Run("ExcludeTypes", AliaserTest(func(t *testing.T, a *Aliaser) {
-		assert.Empty(t, a.alias.Types)
+		assert.Empty(t, a.Types())
 	}, ExcludeTypes()))
 	t.Run("ExcludeNames", AliaserTest(func(t *testing.T, a *Aliaser) {
-		ObjectBatchHelper(t, a.alias.Constants, func(t *testing.T, o types.Object) {
+		ObjectBatchHelper(t, a.Constants(), func(t *testing.T, o types.Object) {
 			assert.NotEqual(t, "A", o.Name())
 			assert.NotEqual(t, "D", o.Name())
 		})
-		ObjectBatchHelper(t, a.alias.Variables, func(t *testing.T, o types.Object) {
+		ObjectBatchHelper(t, a.Variables(), func(t *testing.T, o types.Object) {
 			assert.NotEqual(t, "A", o.Name())
 			assert.NotEqual(t, "D", o.Name())
 		})
-		ObjectBatchHelper(t, a.alias.Functions, func(t *testing.T, o types.Object) {
+		ObjectBatchHelper(t, a.Functions(), func(t *testing.T, o types.Object) {
 			assert.NotEqual(t, "A", o.Name())
 			assert.NotEqual(t, "D", o.Name())
 		})
-		ObjectBatchHelper(t, a.alias.Types, func(t *testing.T, o types.Object) {
+		ObjectBatchHelper(t, a.Types(), func(t *testing.T, o types.Object) {
 			assert.NotEqual(t, "A", o.Name())
 			assert.NotEqual(t, "D", o.Name())
 		})
 	}, ExcludeNames("A", "D")))
-	t.Run("WrapFunctions", func(t *testing.T) {
+	t.Run("AssignFunctions", func(t *testing.T) {
 		t.Run("True", AliaserTest(func(t *testing.T, a *Aliaser) {
 			var buf bytes.Buffer
 			require.NoError(t, a.Generate(&buf))
-			assert.Contains(t, buf.String(), "func J(")
-		}, WrapFunctions(true)))
+			assert.NotContains(t, buf.String(), "func J(")
+		}, AssignFunctions(true)))
 		t.Run("False", AliaserTest(func(t *testing.T, a *Aliaser) {
 			var buf bytes.Buffer
 			require.NoError(t, a.Generate(&buf))
-			assert.NotContains(t, buf.String(), "func J(")
-		}, WrapFunctions(false)))
+			assert.Contains(t, buf.String(), "func J(")
+		}, AssignFunctions(false)))
+	})
+	t.Run("OnDuplicate", func(t *testing.T) {
+		t.Run("Skip", AliaserTest(func(t *testing.T, a *Aliaser) {
+			v0 := a.variables[0]
+			a.AddVariables(types.NewVar(0, v0.Pkg(), "A", types.Typ[types.Uint8]))
+			assert.False(t, slices.ContainsFunc(a.variables, func(c *Var) bool { return c.Name() == "A" }))
+		}, OnDuplicate(OnDuplicateSkip)))
+		t.Run("Replace", AliaserTest(func(t *testing.T, a *Aliaser) {
+			pkg := a.variables[0].Pkg()
+			assert.True(t, slices.ContainsFunc(a.constants, func(c *Const) bool { return c.Name() == "A" }))
+
+			a.AddVariables(types.NewVar(0, pkg, "A", types.Typ[types.Uint8]))
+			assert.False(t, slices.ContainsFunc(a.constants, func(c *Const) bool { return c.Name() == "A" }))
+			assert.True(t, slices.ContainsFunc(a.variables, func(c *Var) bool { return c.Name() == "A" }))
+
+			a.AddConstants(types.NewConst(0, pkg, "A", types.Typ[types.Uint8], nil))
+			assert.False(t, slices.ContainsFunc(a.variables, func(c *Var) bool { return c.Name() == "A" }))
+			assert.True(t, slices.ContainsFunc(a.constants, func(c *Const) bool { return c.Name() == "A" }))
+
+			f0 := a.functions[0]
+			a.AddFunctions(types.NewFunc(0, pkg, "A", types.NewSignatureType(
+				f0.tsig.Recv(),
+				sequence.FromSequenceable(f0.tsig.RecvTypeParams()).Slice(),
+				sequence.FromSequenceable(f0.tsig.TypeParams()).Slice(),
+				f0.tsig.Params(),
+				f0.tsig.Results(),
+				f0.tsig.Variadic(),
+			)))
+			assert.False(t, slices.ContainsFunc(a.constants, func(c *Const) bool { return c.Name() == "A" }))
+			assert.True(t, slices.ContainsFunc(a.functions, func(c *Func) bool { return c.Name() == "A" }))
+
+			a.AddTypes(types.NewTypeName(0, pkg, "A", types.Typ[types.Uint8]))
+			assert.False(t, slices.ContainsFunc(a.functions, func(c *Func) bool { return c.Name() == "A" }))
+			assert.True(t, slices.ContainsFunc(a.types, func(c *TypeName) bool { return c.Name() == "A" }))
+
+			// replace the type
+			a.AddConstants(types.NewConst(0, pkg, "A", types.Typ[types.Uint8], nil))
+			assert.False(t, slices.ContainsFunc(a.types, func(c *TypeName) bool { return c.Name() == "A" }))
+			assert.True(t, slices.ContainsFunc(a.constants, func(c *Const) bool { return c.Name() == "A" }))
+		}, OnDuplicate(OnDuplicateReplace)))
+		t.Run("Panic", AliaserTest(func(t *testing.T, a *Aliaser) {
+			v0 := a.variables[0]
+			assert.Panics(t, func() { a.AddVariables(types.NewVar(0, v0.Pkg(), "A", types.Typ[types.Uint8])) })
+		}, OnDuplicate(OnDuplicatePanic)))
 	})
 }
 
 func TestAliaserError(t *testing.T) {
+	// EmptyTarget and EmptyPattern are covered in the TestGenerate* tests
+	t.Run("NilConfig", func(t *testing.T) {
+		_, err := New(nil)
+		assert.ErrorIs(t, err, ErrNilConfig)
+	})
 	t.Run("InvalidPattern", func(t *testing.T) {
-		_, err := New(TestTarget, "golang.org/x/tools/go/*")
+		_, err := New(&Config{TargetPackage: TestTarget, Pattern: "golang.org/x/tools/go/*"})
 		assert.Error(t, err)
 	})
 	t.Run("TooManyPackages", func(t *testing.T) {
-		_, err := New(TestTarget, "golang.org/x/tools/go/...")
+		_, err := New(&Config{TargetPackage: TestTarget, Pattern: "golang.org/x/tools/go/..."})
 		assert.Error(t, err)
 	})
 	t.Run("Load", func(t *testing.T) {
 		t.Setenv("GOPACKAGESDRIVER", "fakedriver")
-		_, err := New(TestTarget, TestPattern)
+		_, err := New(&Config{TargetPackage: TestTarget, Pattern: TestPattern})
 		assert.Error(t, err)
 	})
+	t.Run("ObjectTypeError", AliaserTest(func(t *testing.T, a *Aliaser) {
+		LoadedPackageHelper(t, func(t *testing.T, p *packages.Package) {
+			p.Types.Scope().Insert(
+				types.NewLabel(0, p.Types, "MyLabel"),
+			)
+			assert.Error(t, a.addPkgObjects(p))
+		})
+	}))
 	t.Run("ParseTemplate", func(t *testing.T) {
 		oldFS := tmplFS
 		defer func() { tmplFS = oldFS }()
@@ -92,8 +162,8 @@ func TestAliaserError(t *testing.T) {
 		assert.Error(t, a.Generate(io.Discard)) // empty a.alias
 	})
 	t.Run("Format", AliaserTest(func(t *testing.T, a *Aliaser) {
-		c0 := a.alias.Constants[0] // change the first constant to have an invalid name
-		a.alias.Constants[0] = NewConst(types.NewConst(c0.Pos(), c0.Pkg(), c0.Name()+".", c0.Type(), c0.Val()), a.alias.Importer)
+		c0 := a.Constants()[0] // change the first constant to have an invalid name
+		a.constants[0] = NewConst(types.NewConst(c0.Pos(), c0.Pkg(), c0.Name()+".", c0.Type(), c0.Val()), a.Importer)
 		assert.Error(t, a.Generate(io.Discard))
 	}))
 	t.Run("Write", AliaserTest(func(t *testing.T, a *Aliaser) {
@@ -110,24 +180,14 @@ func TestAliaserError(t *testing.T) {
 			assert.Error(t, a.GenerateFile(filepath.Join(nwDir, "alias.go")))
 		})
 	}))
-}
-
-func TestSetAlias(t *testing.T) {
-	t.Run("NotExportedObject", AliaserTest(func(t *testing.T, a *Aliaser) {
-		LoadedPackageHelper(t, func(t *testing.T, p *packages.Package) {
-			p.Types.Scope().Insert(
-				types.NewConst(0, p.Types, "notExported", types.Typ[types.Uint8], nil),
-			)
-			assert.NoError(t, a.setAlias(a.alias.Config, p)) // cover not exported object
-		})
+	t.Run("addObjectName", AliaserTest(func(t *testing.T, a *Aliaser) {
+		a.onDuplicate = 10
+		v := types.NewVar(0, a.variables[0].Pkg(), "A", types.Typ[types.Uint8])
+		assert.Panics(t, func() { a.addObjectName(v, 10) })
 	}))
-	t.Run("ObjectTypeError", AliaserTest(func(t *testing.T, a *Aliaser) {
-		LoadedPackageHelper(t, func(t *testing.T, p *packages.Package) {
-			p.Types.Scope().Insert(
-				types.NewLabel(0, p.Types, "MyLabel"),
-			)
-			assert.Error(t, a.setAlias(a.alias.Config, p))
-		})
+	t.Run("deleteObject", AliaserTest(func(t *testing.T, a *Aliaser) {
+		v := types.NewVar(0, a.variables[0].Pkg(), "A", types.Typ[types.Uint8])
+		assert.Panics(t, func() { a.deleteObject(v, 10) })
 	}))
 }
 
@@ -136,9 +196,9 @@ func TestSetAlias(t *testing.T) {
 // and the options, then, it calls the given function.
 func AliaserTest(fn func(*testing.T, *Aliaser), opts ...Option) func(t *testing.T) {
 	return func(t *testing.T) {
-		a, err := New(TestTarget, TestPattern, opts...)
+		a, err := New(&Config{TargetPackage: TestTarget, Pattern: TestPattern}, opts...)
 		assert.NoError(t, err)
-		require.NotNil(t, a.alias)
+		require.NotNil(t, a)
 		fn(t, a)
 	}
 }

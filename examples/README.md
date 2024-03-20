@@ -9,8 +9,14 @@ the `aliaser` library to generate aliases for `github.com/gin-gonic/gin`
 package.
 
 ```go
+import (
+	"log"
+
+	"github.com/marcozac/go-aliaser"
+)
+
 func main() {
-	a, err := aliaser.New("gin", "github.com/gin-gonic/gin")
+	a, err := aliaser.New(&aliaser.Config{TargetPackage: "gin", Pattern: "github.com/gin-gonic/gin"})
 	if err != nil {
 		log.Fatal(err)
 	}

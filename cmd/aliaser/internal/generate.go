@@ -30,11 +30,11 @@ func NewGenerate() *cobra.Command {
 			if header := MustV(cmd.Flags().GetString("header")); header != "" {
 				opts = append(opts, aliaser.WithHeader(header))
 			}
-			a, err := aliaser.New(
-				MustV(cmd.Flags().GetString("target")),
-				MustV(cmd.Flags().GetString("pattern")),
-				opts...,
-			)
+
+			a, err := aliaser.New(&aliaser.Config{
+				TargetPackage: MustV(cmd.Flags().GetString("target")),
+				Pattern:       MustV(cmd.Flags().GetString("pattern")),
+			}, opts...)
 			if err != nil {
 				return fmt.Errorf("aliaser: %w", err)
 			}

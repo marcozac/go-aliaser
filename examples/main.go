@@ -8,7 +8,7 @@ import (
 
 // main generates the aliases for the gin package and writes them to gin/alias.go.
 func main() {
-	a, err := aliaser.New("gin", "github.com/gin-gonic/gin")
+	a, err := aliaser.New(&aliaser.Config{TargetPackage: "gin", Pattern: "github.com/gin-gonic/gin"})
 	if err != nil {
 		log.Fatal(err)
 	}

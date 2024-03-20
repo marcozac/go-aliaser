@@ -35,7 +35,7 @@ To use aliaser in your project, follow these steps:
 ```go
 import "github.com/marcozac/go-aliaser"
 
-a, err := aliaser.New("mypkg", "github.com/example/package")
+a, err := aliaser.New(&aliaser.Config{TargetPackage: "mypkg", Pattern: "github.com/example/package"})
 if err != nil {
   // ...
 }
