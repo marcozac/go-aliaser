@@ -126,7 +126,7 @@ func newObjectResolver(obj types.Object, imp *importer.Importer) objectResolver 
 // PackageAlias returns the alias of the package as declared in the import
 // statement.
 func (o *objectResolver) PackageAlias() string {
-	return o.imp.AliasOf(o.orig.Pkg().Path())
+	return o.imp.AliasOf(o.orig.Pkg())
 }
 
 // TypeString returns the object type as a string, resolving the package
@@ -137,7 +137,7 @@ func (o *objectResolver) TypeString() string {
 
 func (o *objectResolver) qualifier() types.Qualifier {
 	return func(p *types.Package) string {
-		return o.imp.AliasOf(p.Path())
+		return o.imp.AliasOf(p)
 	}
 }
 

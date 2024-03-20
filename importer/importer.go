@@ -5,18 +5,21 @@ import (
 	"go/types"
 	"slices"
 	"sync"
+	"sync/atomic"
+
+	"github.com/marcozac/go-aliaser/util/maps"
 )
 
 // Importer is the type used to manage the package imports.
 // It is used to ensure that the same package is imported only once and to
 // alias the package names avoiding conflicts on same-name packages.
 //
-// All exported methods are safe for concurrent use if the underlying package
-// is not modified concurrently by other goroutines.
+// All exported methods are safe for concurrent use if the underlying packages
+// are not modified concurrently by other goroutines.
 type Importer struct {
 	// imports is the map of package imports formatted as "path:Package"
 	imports        map[string]*types.Package
-	toAlias        bool
+	toAlias        atomic.Bool
 	aliasedImports map[string]string
 	mu             sync.RWMutex
 }
@@ -42,12 +45,12 @@ func (imp *Importer) addImport(p *types.Package) {
 	}
 	path := p.Path()
 	if _, ok := imp.imports[path]; !ok {
-		imp.toAlias = true
+		imp.toAlias.Store(true)
 		imp.imports[path] = p
 	}
 }
 
-// Imports returns the list of the imported packages.
+// Imports creates a new slice containing all the imported packages.
 func (imp *Importer) Imports() []*types.Package {
 	imp.mu.RLock()
 	defer imp.mu.RUnlock()
@@ -55,11 +58,7 @@ func (imp *Importer) Imports() []*types.Package {
 }
 
 func (imp *Importer) importsList() []*types.Package {
-	imports := make([]*types.Package, 0, len(imp.imports))
-	for _, pkg := range imp.imports {
-		imports = append(imports, pkg)
-	}
-	return imports
+	return maps.Values(imp.imports)
 }
 
 // AliasedImports returns the map of package imports formatted as "path:alias".
@@ -97,51 +96,45 @@ func (imp *Importer) importsList() []*types.Package {
 func (imp *Importer) AliasedImports() map[string]string {
 	imp.mu.Lock()
 	defer imp.mu.Unlock()
-	return imp.aliasImports()
+	if imp.toAlias.Load() {
+		imp.aliasImports()
+	}
+	return imp.aliasedImports
 }
 
-func (imp *Importer) aliasImports() map[string]string {
-	if !imp.toAlias {
-		return imp.aliasedImports
+func (imp *Importer) aliasImports() {
+	if !imp.toAlias.CompareAndSwap(true, false) {
+		return
 	}
-	l := len(imp.imports)
-	paths := make([]string, 0, l)
-	for path := range imp.imports {
-		paths = append(paths, path)
-	}
+	paths := maps.Keys(imp.imports)
 	slices.Sort(paths)
-	orderedImports := make(map[string]string, l)
+	aliases := make([]string, 0, len(paths))
+	imp.aliasedImports = make(map[string]string, len(paths))
 	for _, path := range paths {
-		pkg := imp.imports[path]
-		name := pkg.Name()
+		name := imp.imports[path].Name()
 		alias := name
-		i := 2
-	aliasLoop:
-		for _, aliased := range orderedImports {
-			if alias == aliased {
-				alias = fmt.Sprintf("%s_%d", name, i)
-				i++
-				goto aliasLoop
+		for i := 2; ; i++ {
+			if !slices.Contains(aliases, alias) {
+				aliases = append(aliases, alias)
+				imp.aliasedImports[path] = alias
+				break
 			}
+			alias = fmt.Sprintf("%s_%d", name, i)
 		}
-		orderedImports[path] = alias
 	}
-	imp.aliasedImports = orderedImports // cache
-	imp.toAlias = false
-	return orderedImports
 }
 
 // AliasOf returns the alias of the given package path. If the package is not
 // imported, the function returns an empty string.
-func (imp *Importer) AliasOf(path string) string {
+func (imp *Importer) AliasOf(p *types.Package) string {
 	imp.mu.Lock()
 	defer imp.mu.Unlock()
-	return imp.aliasOf(path)
-}
-
-func (imp *Importer) aliasOf(path string) string {
-	if imp.toAlias {
+	if imp.toAlias.Load() {
 		imp.aliasImports()
 	}
-	return imp.aliasedImports[path]
+	return imp.aliasOf(p)
+}
+
+func (imp *Importer) aliasOf(p *types.Package) string {
+	return imp.aliasedImports[p.Path()]
 }

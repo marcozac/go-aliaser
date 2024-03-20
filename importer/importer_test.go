@@ -17,13 +17,12 @@ func TestImporter(t *testing.T) {
 		pkgPath2 = "github.com/marcozac/go-aliaser/fake2"
 		pkgPath3 = "github.com/marcozac/go-aliaser/fake3"
 	)
-	pm := map[string]string{
-		pkgPath1: pkgName,
-		pkgPath2: pkgName,
-		pkgPath3: pkgName,
+	pm := map[string]*types.Package{
+		pkgPath1: types.NewPackage(pkgPath1, pkgName),
+		pkgPath2: types.NewPackage(pkgPath2, pkgName),
+		pkgPath3: types.NewPackage(pkgPath3, pkgName),
 	}
-	for path, name := range pm {
-		pkg := types.NewPackage(path, name)
+	for _, pkg := range pm {
 		imp.AddImport(pkg)
 	}
 	l := len(imp.Imports())
@@ -49,11 +48,11 @@ func TestImporter(t *testing.T) {
 		assert.NotEqual(t, alias3, imp.imports[pkgPath3].Name())
 	})
 	t.Run("AliasOf", func(t *testing.T) {
-		imp.toAlias = true // force re-aliasing
-		assert.Equal(t, pkgName, imp.AliasOf(pkgPath1))
-		assert.Equal(t, pkgName+"_2", imp.AliasOf(pkgPath2))
-		assert.Equal(t, pkgName+"_3", imp.AliasOf(pkgPath3))
-		assert.Empty(t, imp.AliasOf("unknown"))
+		imp.toAlias.Store(true) // force re-aliasing
+		assert.Equal(t, pkgName, imp.AliasOf(pm[pkgPath1]))
+		assert.Equal(t, pkgName+"_2", imp.AliasOf(pm[pkgPath2]))
+		assert.Equal(t, pkgName+"_3", imp.AliasOf(pm[pkgPath3]))
+		assert.Empty(t, imp.AliasOf(types.NewPackage("unknown", pkgName)))
 	})
 	t.Run("Concurrent", func(t *testing.T) {
 		imp2 := New()
