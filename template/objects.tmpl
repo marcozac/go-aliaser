@@ -1,7 +1,11 @@
 {{ define "simple_objects" }}
 {{- range $o := $ }}
-	{{ $o.Name }} = {{ $o.PackageAlias }}.{{ $o.Name }}
+	{{- template "simple_object" $o }}
 {{- end }}
+{{- end }}
+
+{{ define "simple_object" }}
+	{{ $.Name }} = {{ $.PackageAlias }}.{{ $.Name }}
 {{- end }}
 
 {{ define "constants" }}
@@ -23,9 +27,9 @@ var (
 	{{- template "simple_objects" $.Functions }}
 )
 {{ else }}
-{{ range $o := $.Functions }}
-func {{ $o.Name }} {{ $o.WriteSignature }} {
-	{{ if $o.Returns }} return {{ end }}{{ $o.PackageAlias }}.{{ $o.Name }}({{ $o.CallArgs }})
+{{ range $fn := $.Functions }}
+func {{ $fn.Name }} {{ $fn.WriteSignature }} {
+	{{ if $fn.Returns }} return {{ end }}{{ $fn.PackageAlias }}.{{ $fn.Name }}{{ if $fn.Generic }}[{{- template "type_param_names" $fn.TypeParams }}]{{- end }}({{ $fn.CallArgs }})
 }
 {{ end }}
 {{- end }}
@@ -33,6 +37,20 @@ func {{ $o.Name }} {{ $o.WriteSignature }} {
 
 {{ define "types" }}
 type (
-	{{- template "simple_objects" $.Types }}
+{{- range $t := $.Types }}
+	{{- if $t.Generic }}
+	{{ $t.Name }}[{{- template "type_params" $t.TypeParams }}] {{ $t.PackageAlias }}.{{ $t.Name }}[{{- template "type_param_names" $t.TypeParams }}]
+	{{- else }}
+	{{ $t.Name }} = {{ $t.TypeString }}
+	{{- end }}
+{{- end }}
 )
+{{- end }}
+
+{{ define "type_params" }}
+{{- range $tp := $ }}{{ $tp }} {{ $tp.Constraint }}, {{- end }}
+{{- end }}
+
+{{ define "type_param_names" }}
+{{- range $tp := $ }}{{ $tp }}, {{- end }}
 {{- end }}

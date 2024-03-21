@@ -113,12 +113,14 @@ func NewTypeName(tn *types.TypeName, imp *importer.Importer) *TypeName {
 }
 
 type objectResolver struct {
-	orig types.Object
-	imp  *importer.Importer
+	orig       types.Object
+	imp        *importer.Importer
+	typeParams *sequence.Sequence[*types.TypeParam]
+	typeArgs   *sequence.Sequence[types.Type]
 }
 
 func newObjectResolver(obj types.Object, imp *importer.Importer) objectResolver {
-	o := objectResolver{obj, imp}
+	o := objectResolver{orig: obj, imp: imp}
 	o.importType(obj.Type())
 	return o
 }
@@ -133,6 +135,26 @@ func (o *objectResolver) PackageAlias() string {
 // names using the aliases declared in the import statements.
 func (o *objectResolver) TypeString() string {
 	return types.TypeString(o.orig.Type(), o.qualifier())
+}
+
+// Generic returns true if the object is generic, that is, if it has type
+// parameters that are not resolved by type arguments.
+//
+// Example:
+//
+//	type A[T1, T2 any] struct{ Foo T1; Bar T2 } // true
+//	type B[T1 any] A[T1, int] // false
+//	type C A[int, string] // false
+func (o *objectResolver) Generic() bool {
+	return len(o.TypeParams()) > 0
+}
+
+// TypeParams returns the type parameters of the object as a slice.
+func (o *objectResolver) TypeParams() []*types.TypeParam {
+	if o.typeParams == nil {
+		return nil
+	}
+	return o.typeParams.Slice()
 }
 
 func (o *objectResolver) qualifier() types.Qualifier {
@@ -159,12 +181,6 @@ func (o *objectResolver) importType(typ types.Type) {
 			ForEach(o.varImporter)
 		sequence.FromSequenceable(typ.Results()).
 			ForEach(o.varImporter)
-	/*
-		// tuples appear only in signatures, which are already handled
-		case *types.Tuple:
-			sequence.FromSequenceable(typ).
-				ForEach(o.varImporter)
-	*/
 	case *types.Struct:
 		sequence.New(typ.NumFields, typ.Field).
 			ForEach(o.varImporter)
@@ -172,6 +188,16 @@ func (o *objectResolver) importType(typ types.Type) {
 		sequence.New(typ.NumMethods, typ.Method).
 			ForEach(o.funcImporter)
 		sequence.New(typ.NumEmbeddeds, typ.EmbeddedType).
+			ForEach(o.importType)
+	}
+	if typ, ok := typ.(interface{ TypeParams() *types.TypeParamList }); ok {
+		o.typeParams = sequence.FromSequenceable(typ.TypeParams()).
+			ForEach(func(tp *types.TypeParam) {
+				o.importType(tp.Constraint())
+			})
+	}
+	if typ, ok := typ.(interface{ TypeArgs() *types.TypeList }); ok {
+		o.typeArgs = sequence.FromSequenceable(typ.TypeArgs()).
 			ForEach(o.importType)
 	}
 }

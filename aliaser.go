@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"go/types"
 	"io"
@@ -318,20 +319,28 @@ func (a *Aliaser) Generate(wr io.Writer) error {
 // already exists, it is truncated.
 //
 // GenerateFile returns an error in the same cases as [Aliaser.Generate] and
-// if any of the directory creation or file writing operations fail.
+// if any of the directory creation or file writing operations fail. In this
+// case, if the file did not exist before the operation, it is removed,
+// otherwise, its content is reset to the original state.
 func (a *Aliaser) GenerateFile(name string) error {
-	// TODO: keep a backup and restore in case of failure
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
 		return fmt.Errorf("create directory: %w", err)
 	}
-	f, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o644)
+	f, reset, err := OpenFileWithReset(name)
 	if err != nil {
-		return fmt.Errorf("open file: %w", err)
+		return err
 	}
 	defer f.Close()
-	return a.Generate(f)
+	if err := a.generate(f); err != nil {
+		err = fmt.Errorf("generate: %w", err)
+		if rerr := reset(); rerr != nil {
+			return errors.Join(err, fmt.Errorf("reset file: %w", rerr))
+		}
+		return err
+	}
+	return nil
 }
 
 func (a *Aliaser) generate(wr io.Writer) error {
@@ -352,10 +361,10 @@ func (a *Aliaser) generate(wr io.Writer) error {
 func (a *Aliaser) executeTemplate(buf *bytes.Buffer) error {
 	tmpl, err := template.ParseFS(tmplFS, "template/*.tmpl")
 	if err != nil {
-		return fmt.Errorf("parse template: %w", err)
+		return fmt.Errorf("parse: %w", err)
 	}
 	if err := tmpl.ExecuteTemplate(buf, "alias", a); err != nil {
-		return fmt.Errorf("execute template: %w", err)
+		return fmt.Errorf("execute: %w", err)
 	}
 	return nil
 }
@@ -441,30 +450,30 @@ func WithHeader(header string) Option {
 }
 
 // ExcludeConstants excludes the constants from the loaded package.
-func ExcludeConstants() Option {
+func ExcludeConstants(v bool) Option {
 	return option(func(c *Config) {
-		c.excludeConstants = true
+		c.excludeConstants = v
 	})
 }
 
 // ExcludeVariables excludes the variables from the loaded package.
-func ExcludeVariables() Option {
+func ExcludeVariables(v bool) Option {
 	return option(func(c *Config) {
-		c.excludeVariables = true
+		c.excludeVariables = v
 	})
 }
 
 // ExcludeFunctions excludes the functions from the loaded package.
-func ExcludeFunctions() Option {
+func ExcludeFunctions(v bool) Option {
 	return option(func(c *Config) {
-		c.excludeFunctions = true
+		c.excludeFunctions = v
 	})
 }
 
 // ExcludeTypes excludes the types from the loaded package.
-func ExcludeTypes() Option {
+func ExcludeTypes(v bool) Option {
 	return option(func(c *Config) {
-		c.excludeTypes = true
+		c.excludeTypes = v
 	})
 }
 

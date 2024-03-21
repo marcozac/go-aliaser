@@ -47,10 +47,15 @@ func (s *Signature) Wrapper() *types.Signature {
 		for _, alias := range ai {
 			aliases = append(aliases, alias)
 		}
+		typeParams := make([]*types.TypeParam, s.TypeParams().Len())
+		sequence.FromSequenceable(s.TypeParams()).
+			ForEachIndex(func(tp *types.TypeParam, i int) {
+				typeParams[i] = types.NewTypeParam(tp.Obj(), tp.Constraint())
+			})
 		s.wrapper = types.NewSignatureType(
-			s.Recv(),
-			sequence.FromSequenceable(s.RecvTypeParams()).Slice(),
-			sequence.FromSequenceable(s.TypeParams()).Slice(),
+			s.Recv(), // always nil
+			nil,      // wrap funcs, not methods
+			typeParams,
 			NewAliasedTuple(aliases, s.Params()),
 			NewAliasedTuple(aliases, s.Results()),
 			s.Variadic(),
