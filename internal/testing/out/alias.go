@@ -41,12 +41,37 @@ func J(p1 int, p2 *string, p3 []string, p4 []*bool, p5 [2]string, p6 map[string]
 	return pkg.J(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, p16, p17, p18, json_, variadic...)
 }
 
+func S[T any](t T) {
+	pkg.S[T](t)
+}
+
+func T[C context.Context, S ~string, T any](ctx C, s S, t T) (S, *pkg.P[T, S]) {
+	return pkg.T[C, S, T](ctx, s, t)
+}
+
+func U[T any]() T {
+	return pkg.U[T]()
+}
+
+func V[I ~string]() pkg.P[int, I] {
+	return pkg.V[I]()
+}
+
+func W() pkg.P[int, string] {
+	return pkg.W()
+}
+
 type (
-	D = pkg.D
-	E = pkg.E
-	F = pkg.F
-	G = pkg.G
-	K = pkg.K
-	L = pkg.L
-	M = pkg.M
+	D                   = pkg.D
+	E                   = pkg.E
+	F                   = int
+	G                   = pkg.D
+	K                   = pkg.K
+	L                   = pkg.L
+	M                   = pkg.M
+	N[T any]            pkg.N[T]
+	O                   = pkg.O
+	P[T any, V ~string] pkg.P[T, V]
+	Q                   = pkg.P[string, pkg.D]
+	R[T any]            pkg.R[T]
 )

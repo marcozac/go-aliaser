@@ -361,10 +361,10 @@ func (a *Aliaser) generate(wr io.Writer) error {
 func (a *Aliaser) executeTemplate(buf *bytes.Buffer) error {
 	tmpl, err := template.ParseFS(tmplFS, "template/*.tmpl")
 	if err != nil {
-		return fmt.Errorf("parse template: %w", err)
+		return fmt.Errorf("parse: %w", err)
 	}
 	if err := tmpl.ExecuteTemplate(buf, "alias", a); err != nil {
-		return fmt.Errorf("execute template: %w", err)
+		return fmt.Errorf("execute: %w", err)
 	}
 	return nil
 }

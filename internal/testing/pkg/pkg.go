@@ -80,3 +80,39 @@ type L interface {
 }
 
 type M template.Template
+
+type N[T any] struct {
+	Foo T
+}
+
+type O N[string]
+
+type P[T any, V ~string] struct {
+	N N[T]
+	V V
+}
+
+func (*P[T, V]) Foo() {}
+
+type Q = P[string, D]
+
+type R[T any] P[T, string]
+
+func S[T any](t T) {}
+
+func T[C context.Context, S ~string, T any](ctx C, s S, t T) (S, *P[T, S]) {
+	return s, &P[T, S]{}
+}
+
+func U[T any]() T {
+	var v T
+	return v
+}
+
+func V[I ~string]() P[int, I] {
+	return P[int, I]{}
+}
+
+func W() P[int, string] {
+	return P[int, string]{}
+}

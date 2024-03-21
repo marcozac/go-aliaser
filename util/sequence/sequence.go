@@ -81,19 +81,21 @@ func (seq *Sequence[T]) SliceFuncFilter(fn func(T) (T, bool)) []T {
 }
 
 // ForEach calls the given function for each element in the sequence.
-func (seq *Sequence[T]) ForEach(fn func(T)) {
+func (seq *Sequence[T]) ForEach(fn func(T)) *Sequence[T] {
 	for i := 0; i < seq.len(); i++ {
 		fn(seq.At(i))
 	}
+	return seq
 }
 
 // ForEachIndex calls the given function for each element in the sequence as
 // [Sequence.ForEach], but also provides the index of the element. It avoids
 // the need to use a closure to capture the index.
-func (seq *Sequence[T]) ForEachIndex(fn func(T, int)) {
+func (seq *Sequence[T]) ForEachIndex(fn func(T, int)) *Sequence[T] {
 	for i := 0; i < seq.len(); i++ {
 		fn(seq.At(i), i)
 	}
+	return seq
 }
 
 // Sequenceable is a generic interface for types that can be expressed as a
