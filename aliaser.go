@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"go/types"
 	"io"
@@ -318,20 +319,28 @@ func (a *Aliaser) Generate(wr io.Writer) error {
 // already exists, it is truncated.
 //
 // GenerateFile returns an error in the same cases as [Aliaser.Generate] and
-// if any of the directory creation or file writing operations fail.
+// if any of the directory creation or file writing operations fail. In this
+// case, if the file did not exist before the operation, it is removed,
+// otherwise, its content is reset to the original state.
 func (a *Aliaser) GenerateFile(name string) error {
-	// TODO: keep a backup and restore in case of failure
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
 		return fmt.Errorf("create directory: %w", err)
 	}
-	f, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o644)
+	f, reset, err := OpenFileWithReset(name)
 	if err != nil {
-		return fmt.Errorf("open file: %w", err)
+		return err
 	}
 	defer f.Close()
-	return a.Generate(f)
+	if err := a.generate(f); err != nil {
+		err = fmt.Errorf("generate: %w", err)
+		if rerr := reset(); rerr != nil {
+			return errors.Join(err, fmt.Errorf("reset file: %w", rerr))
+		}
+		return err
+	}
+	return nil
 }
 
 func (a *Aliaser) generate(wr io.Writer) error {

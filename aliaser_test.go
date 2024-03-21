@@ -17,7 +17,7 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-func TestSetAlias(t *testing.T) {
+func TestAliaser(t *testing.T) {
 	t.Run("NotExportedObject", AliaserTest(func(t *testing.T, a *Aliaser) {
 		LoadedPackageHelper(t, func(t *testing.T, p *packages.Package) {
 			p.Types.Scope().Insert(
@@ -188,6 +188,28 @@ func TestAliaserError(t *testing.T) {
 	t.Run("deleteObject", AliaserTest(func(t *testing.T, a *Aliaser) {
 		v := types.NewVar(0, a.variables[0].Pkg(), "A", types.Typ[types.Uint8])
 		assert.Panics(t, func() { a.deleteObject(v, 10) })
+	}))
+	t.Run("Generate", AliaserTest(func(t *testing.T, a *Aliaser) {
+		opener := openFile
+
+		dir := t.TempDir()
+		tf, err := os.CreateTemp(dir, "generate-*.go")
+		require.NoError(t, err)
+		_, err = tf.WriteString("package foo\n")
+		require.NoError(t, err)
+		require.NoError(t, tf.Close())
+		c0 := a.Constants()[0] // change the first constant to have an invalid name
+		a.constants[0] = NewConst(types.NewConst(c0.Pos(), c0.Pkg(), c0.Name()+".", c0.Type(), c0.Val()), a.Importer)
+		assert.Error(t, a.GenerateFile(tf.Name()))
+		t.Run("Reset", func(t *testing.T) {
+			defer func() { openFile = opener }()
+			openFile = newOpenFileErrorer(fileErrorerConfig{
+				noReadErr:  true,
+				noSeekErr:  true,
+				noTruncErr: true,
+			})
+			assert.Error(t, a.GenerateFile(tf.Name()))
+		})
 	}))
 }
 
