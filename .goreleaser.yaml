@@ -34,3 +34,5 @@ changelog:
       - '^ci:'
       - '^docs:'
       - '^test:'
+      - '^Merge pull request'
+      - '^Merge branch'
