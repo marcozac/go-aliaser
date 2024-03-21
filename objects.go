@@ -64,7 +64,7 @@ func NewFunc(fn *types.Func, imp *importer.Importer) *Func {
 // the parameter and result names on conflict with the package aliases.
 func (fn *Func) WriteSignature() string {
 	buf := new(bytes.Buffer)
-	types.WriteSignature(buf, fn.tsig.Wrapper(), fn.qualifier())
+	types.WriteSignature(buf, fn.tsig.Wrapper(), fn.qualifier)
 	return buf.String()
 }
 
@@ -113,15 +113,16 @@ func NewTypeName(tn *types.TypeName, imp *importer.Importer) *TypeName {
 }
 
 type objectResolver struct {
+	typeQualifier
 	orig       types.Object
-	imp        *importer.Importer
-	typeParams *sequence.Sequence[*types.TypeParam]
+	typeParams []*TypeParam
 	typeArgs   *sequence.Sequence[types.Type]
 }
 
 func newObjectResolver(obj types.Object, imp *importer.Importer) objectResolver {
-	o := objectResolver{orig: obj, imp: imp}
+	o := objectResolver{typeQualifier: typeQualifier{imp}, orig: obj}
 	o.importType(obj.Type())
+	o.setGenerics(obj.Type())
 	return o
 }
 
@@ -134,7 +135,7 @@ func (o *objectResolver) PackageAlias() string {
 // TypeString returns the object type as a string, resolving the package
 // names using the aliases declared in the import statements.
 func (o *objectResolver) TypeString() string {
-	return types.TypeString(o.orig.Type(), o.qualifier())
+	return types.TypeString(o.orig.Type(), o.qualifier)
 }
 
 // Generic returns true if the object is generic, that is, if it has type
@@ -146,21 +147,24 @@ func (o *objectResolver) TypeString() string {
 //	type B[T1 any] A[T1, int] // false
 //	type C A[int, string] // false
 func (o *objectResolver) Generic() bool {
-	return len(o.TypeParams()) > 0
+	tpl := len(o.TypeParams())
+	return tpl > 0 && tpl > len(o.TypeArgs())
 }
 
 // TypeParams returns the type parameters of the object as a slice.
-func (o *objectResolver) TypeParams() []*types.TypeParam {
+func (o *objectResolver) TypeParams() []*TypeParam {
 	if o.typeParams == nil {
 		return nil
 	}
-	return o.typeParams.Slice()
+	return o.typeParams
 }
 
-func (o *objectResolver) qualifier() types.Qualifier {
-	return func(p *types.Package) string {
-		return o.imp.AliasOf(p)
+// TypeArgs returns the type arguments of the object as a slice.
+func (o *objectResolver) TypeArgs() []types.Type {
+	if o.typeArgs == nil {
+		return nil
 	}
+	return o.typeArgs.Slice()
 }
 
 func (o *objectResolver) importType(typ types.Type) {
@@ -190,16 +194,6 @@ func (o *objectResolver) importType(typ types.Type) {
 		sequence.New(typ.NumEmbeddeds, typ.EmbeddedType).
 			ForEach(o.importType)
 	}
-	if typ, ok := typ.(interface{ TypeParams() *types.TypeParamList }); ok {
-		o.typeParams = sequence.FromSequenceable(typ.TypeParams()).
-			ForEach(func(tp *types.TypeParam) {
-				o.importType(tp.Constraint())
-			})
-	}
-	if typ, ok := typ.(interface{ TypeArgs() *types.TypeList }); ok {
-		o.typeArgs = sequence.FromSequenceable(typ.TypeArgs()).
-			ForEach(o.importType)
-	}
 }
 
 func (o *objectResolver) varImporter(pv *types.Var) {
@@ -213,6 +207,21 @@ func (o *objectResolver) funcImporter(fn *types.Func) {
 func (o *objectResolver) importObject(pt PackageTyper) {
 	o.imp.AddImport(pt.Pkg())
 	o.importType(pt.Type())
+}
+
+func (o *objectResolver) setGenerics(typ types.Type) {
+	if typ, ok := typ.(interface{ TypeParams() *types.TypeParamList }); ok {
+		o.typeParams = make([]*TypeParam, typ.TypeParams().Len())
+		sequence.FromSequenceable(typ.TypeParams()).
+			ForEachIndex(func(tp *types.TypeParam, i int) {
+				o.importType(tp.Constraint())
+				o.typeParams[i] = NewTypeParam(tp, o.imp)
+			})
+	}
+	if typ, ok := typ.(interface{ TypeArgs() *types.TypeList }); ok {
+		o.typeArgs = sequence.FromSequenceable(typ.TypeArgs()).
+			ForEach(o.importType)
+	}
 }
 
 // Object extends the [types.Object] interface with methods to get the package

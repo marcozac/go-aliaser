@@ -64,6 +64,49 @@ func (s *Signature) Wrapper() *types.Signature {
 	return s.wrapper
 }
 
+// TypeParam is the type used to represent a type parameter in the loaded package.
+// It must be created using the [NewTypeParam] function.
+type TypeParam struct {
+	*types.TypeParam
+}
+
+// NewTypeParam returns a new [TypeParam] with the given type parameter and sets
+// the constraint to a new [QualifiedType] with the given importer.
+func NewTypeParam(tp *types.TypeParam, imp *importer.Importer) *TypeParam {
+	tp.SetConstraint(NewQualifiedType(tp.Constraint(), imp))
+	return &TypeParam{tp}
+}
+
+// QualifiedType is the type used to represent a type in the loaded package. It
+// contains the original type and the importer used to resolve the package aliases.
+// It must be created using the [NewQualifiedType] function.
+type QualifiedType struct {
+	typeQualifier
+	typ types.Type
+}
+
+// NewQualifiedType returns a new [QualifiedType] with the given type and importer.
+func NewQualifiedType(t types.Type, imp *importer.Importer) *QualifiedType {
+	return &QualifiedType{typeQualifier{imp}, t}
+}
+
+// Underlying returns the underlying type of the qualified type.
+func (qt *QualifiedType) Underlying() types.Type {
+	return qt.typ.Underlying()
+}
+
+// String returns the string representation of the qualified type.
+// It uses the [types.TypeString] function with the package qualifier.
+func (qt *QualifiedType) String() string {
+	return types.TypeString(qt.typ, qt.qualifier)
+}
+
+type typeQualifier struct{ imp *importer.Importer }
+
+func (q typeQualifier) qualifier(p *types.Package) string {
+	return q.imp.AliasOf(p)
+}
+
 // NewAliasedTuple returns a new tuple ensuring none of its variable names
 // is in the given aliases list. If a variable name is in the list, it is
 // suffixed with an underscore.

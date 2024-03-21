@@ -96,7 +96,7 @@ func (*P[T, V]) Foo() {}
 
 type Q = P[string, D]
 
-type R[T any] P[T, string]
+type R[T stdjson.Decoder] P[T, string]
 
 func S[T any](t T) {}
 

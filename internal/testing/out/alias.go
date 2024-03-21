@@ -62,16 +62,27 @@ func W() pkg.P[int, string] {
 }
 
 type (
-	D                   = pkg.D
-	E                   = pkg.E
-	F                   = int
-	G                   = pkg.D
-	K                   = pkg.K
-	L                   = pkg.L
-	M                   = pkg.M
-	N[T any]            pkg.N[T]
-	O                   = pkg.O
+	D = pkg.D
+
+	E = pkg.E
+
+	F = int
+
+	G = pkg.D
+
+	K = pkg.K
+
+	L = pkg.L
+
+	M = pkg.M
+
+	N[T any] pkg.N[T]
+
+	O = pkg.O
+
 	P[T any, V ~string] pkg.P[T, V]
-	Q                   = pkg.P[string, pkg.D]
-	R[T any]            pkg.R[T]
+
+	Q = pkg.P[string, pkg.D]
+
+	R[T json.Decoder] pkg.R[T]
 )
