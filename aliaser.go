@@ -450,30 +450,30 @@ func WithHeader(header string) Option {
 }
 
 // ExcludeConstants excludes the constants from the loaded package.
-func ExcludeConstants() Option {
+func ExcludeConstants(v bool) Option {
 	return option(func(c *Config) {
-		c.excludeConstants = true
+		c.excludeConstants = v
 	})
 }
 
 // ExcludeVariables excludes the variables from the loaded package.
-func ExcludeVariables() Option {
+func ExcludeVariables(v bool) Option {
 	return option(func(c *Config) {
-		c.excludeVariables = true
+		c.excludeVariables = v
 	})
 }
 
 // ExcludeFunctions excludes the functions from the loaded package.
-func ExcludeFunctions() Option {
+func ExcludeFunctions(v bool) Option {
 	return option(func(c *Config) {
-		c.excludeFunctions = true
+		c.excludeFunctions = v
 	})
 }
 
 // ExcludeTypes excludes the types from the loaded package.
-func ExcludeTypes() Option {
+func ExcludeTypes(v bool) Option {
 	return option(func(c *Config) {
-		c.excludeTypes = true
+		c.excludeTypes = v
 	})
 }
 

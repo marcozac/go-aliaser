@@ -37,16 +37,16 @@ func TestAliaserOptions(t *testing.T) {
 	})
 	t.Run("ExcludeConstants", AliaserTest(func(t *testing.T, a *Aliaser) {
 		assert.Empty(t, a.Constants())
-	}, ExcludeConstants()))
+	}, ExcludeConstants(true)))
 	t.Run("ExcludeVariables", AliaserTest(func(t *testing.T, a *Aliaser) {
 		assert.Empty(t, a.Variables())
-	}, ExcludeVariables()))
+	}, ExcludeVariables(true)))
 	t.Run("ExcludeFunctions", AliaserTest(func(t *testing.T, a *Aliaser) {
 		assert.Empty(t, a.Functions())
-	}, ExcludeFunctions()))
+	}, ExcludeFunctions(true)))
 	t.Run("ExcludeTypes", AliaserTest(func(t *testing.T, a *Aliaser) {
 		assert.Empty(t, a.Types())
-	}, ExcludeTypes()))
+	}, ExcludeTypes(true)))
 	t.Run("ExcludeNames", AliaserTest(func(t *testing.T, a *Aliaser) {
 		ObjectBatchHelper(t, a.Constants(), func(t *testing.T, o types.Object) {
 			assert.NotEqual(t, "A", o.Name())
