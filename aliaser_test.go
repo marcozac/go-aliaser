@@ -191,7 +191,6 @@ func TestAliaserError(t *testing.T) {
 	}))
 	t.Run("Generate", AliaserTest(func(t *testing.T, a *Aliaser) {
 		opener := openFile
-
 		dir := t.TempDir()
 		tf, err := os.CreateTemp(dir, "generate-*.go")
 		require.NoError(t, err)
