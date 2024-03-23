@@ -15,7 +15,7 @@ import (
 	"text/template"
 
 	"github.com/marcozac/go-aliaser/importer"
-	"github.com/marcozac/go-aliaser/util/set"
+	"github.com/marcozac/go-aliaser/util/maps"
 	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/imports"
 )
@@ -41,7 +41,7 @@ type Aliaser struct {
 	// Types is the list of exported types in the loaded package.
 	types []*TypeName
 
-	names *set.Set[string, objectId]
+	names *maps.Safe[string, objectId]
 	mu    sync.RWMutex
 }
 
@@ -89,7 +89,7 @@ func New(c *Config, opts ...Option) (*Aliaser, error) {
 	a := &Aliaser{
 		Config:   c.setDefaults().applyOptions(opts...),
 		Importer: importer.New(),
-		names:    set.New[string, objectId](),
+		names:    maps.NewSafe(make(map[string]objectId)),
 	}
 	if err := a.load(); err != nil {
 		return nil, err
@@ -158,12 +158,6 @@ func (a *Aliaser) Constants() []*Const {
 
 // AddConstants adds the given constants to the list of the constants to
 // generate aliases for.
-//
-// NOTE:
-// Currently, the Aliaser does not perform any check to avoid adding the same
-// constant or any other object with the same name more than once. Adding a
-// constant with the same name of another object will result in a non-buildable
-// generated code.
 func (a *Aliaser) AddConstants(cs ...*types.Const) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -270,8 +264,10 @@ func (a *Aliaser) addObjectName(o types.Object, id objectId) (skip bool) {
 	case OnDuplicateSkip:
 		return true
 	case OnDuplicateReplace:
-		oldID := a.names.Swap(o.Name(), id)
-		a.deleteObject(o, oldID)
+		oldID, ok := a.names.Swap(o.Name(), id)
+		if ok {
+			a.deleteObject(o, oldID)
+		}
 	case OnDuplicatePanic:
 		panic(fmt.Errorf("duplicate object name: %s", o.Name()))
 	default: // should never happen, trap for development
