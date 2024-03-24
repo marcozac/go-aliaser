@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"text/template"
 
@@ -107,6 +108,10 @@ func New(c Config, opts ...Option) (*Aliaser, error) {
 // Any field of the given [LoadConfig], which can be nil, can be set using the
 // [LoadOption] functions. If the configuration does not contain any pattern
 // and they are not set using the [WithPatterns] function, Load is a no-op.
+//
+// Load tries to load the packages in the order they are specified in the
+// patterns. The patterns are compared with the package path as a prefix
+// (without traling "/...", if present), but the order is not guaranteed.
 func (a *Aliaser) Load(c *LoadConfig, opts ...LoadOption) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -130,7 +135,18 @@ func (a *Aliaser) load(c *LoadConfig) error {
 		}
 		tpkgs[i] = pkg.Types
 	}
+	slices.SortFunc(tpkgs, func(a, b *types.Package) int {
+		ai := slices.IndexFunc(c.Patterns, newPatternIndexer(a))
+		bi := slices.IndexFunc(c.Patterns, newPatternIndexer(b))
+		return ai - bi
+	})
 	return a.addPackages(c, tpkgs...)
+}
+
+func newPatternIndexer(pkg *types.Package) func(pattern string) bool {
+	return func(pattern string) bool {
+		return strings.HasPrefix(pkg.Path(), strings.TrimSuffix(pattern, "/..."))
+	}
 }
 
 func (a *Aliaser) addPackages(c *LoadConfig, pkgs ...*types.Package) error {
