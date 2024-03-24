@@ -13,6 +13,7 @@ func NewGenerate() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts := []aliaser.Option{
 				aliaser.WithContext(cmd.Context()),
+				aliaser.WithPatterns(MustV(cmd.Flags().GetStringSlice("patterns"))...),
 				aliaser.ExcludeConstants(MustV(cmd.Flags().GetBool("exclude-constants"))),
 				aliaser.ExcludeVariables(MustV(cmd.Flags().GetBool("exclude-variables"))),
 				aliaser.ExcludeFunctions(MustV(cmd.Flags().GetBool("exclude-functions"))),
@@ -23,9 +24,8 @@ func NewGenerate() *cobra.Command {
 			if header := MustV(cmd.Flags().GetString("header")); header != "" {
 				opts = append(opts, aliaser.WithHeader(header))
 			}
-			a, err := aliaser.New(&aliaser.Config{
+			a, err := aliaser.New(aliaser.Config{
 				TargetPackage: MustV(cmd.Flags().GetString("target")),
-				Pattern:       MustV(cmd.Flags().GetString("pattern")),
 			}, opts...)
 			if err != nil {
 				return fmt.Errorf("aliaser: %w", err)
@@ -37,7 +37,7 @@ func NewGenerate() *cobra.Command {
 		},
 	}
 	cmd.Flags().String("target", "", "the package name to use in the generated file")
-	cmd.Flags().String("pattern", "", "the package pattern, in go format, to generate aliases for")
+	cmd.Flags().StringSlice("patterns", []string{}, "the package patterns, in go format, to generate aliases for")
 	cmd.Flags().String("file", "", "the file name to write the aliases to")
 	cmd.Flags().String("header", "", "optional header to be written at the top of the file")
 	cmd.Flags().Bool("exclude-constants", false, "exclude constants from the generated aliases")
@@ -49,7 +49,6 @@ func NewGenerate() *cobra.Command {
 	cmd.Flags().Bool("dry-run", false, "print the aliases without writing them to the file")
 
 	Must(cmd.MarkFlagRequired("target"))
-	Must(cmd.MarkFlagRequired("pattern"))
 	cmd.MarkFlagsOneRequired("file", "dry-run")
 	return cmd
 }

@@ -17,14 +17,14 @@ func TestGenerateCmd(t *testing.T) {
 		root, buf := NewTestRoot(t)
 		root.SetArgs([]string{"generate"})
 		assert.Error(t, root.Execute())
-		assert.Contains(t, buf.String(), "required flag(s) \"pattern\", \"target\" not set")
+		assert.Contains(t, buf.String(), "required flag(s) \"target\" not set")
 	})
 	t.Run("DryRun", func(t *testing.T) {
 		root, buf := NewTestRoot(t)
 		root.SetArgs([]string{
 			"generate", "--dry-run",
 			"--target", "foo",
-			"--pattern", TestPattern,
+			"--patterns", TestPattern,
 		})
 		assert.NoError(t, root.Execute())
 		assert.Contains(t, buf.String(), "package foo")
@@ -34,7 +34,7 @@ func TestGenerateCmd(t *testing.T) {
 		root.SetArgs([]string{
 			"generate", "--dry-run",
 			"--target", "foo",
-			"--pattern", TestPattern,
+			"--patterns", TestPattern,
 			"--exclude-constants",
 			"--exclude-variables",
 			"--exclude-functions",
@@ -50,7 +50,7 @@ func TestGenerateCmd(t *testing.T) {
 		root.SetArgs([]string{
 			"generate", "--dry-run",
 			"--target", "foo",
-			"--pattern", TestPattern,
+			"--patterns", TestPattern,
 			"--exclude-names", "A,C",
 		})
 		assert.NoError(t, root.Execute())
@@ -62,7 +62,7 @@ func TestGenerateCmd(t *testing.T) {
 		root.SetArgs([]string{
 			"generate", "--dry-run",
 			"--target", "foo",
-			"--pattern", TestPattern,
+			"--patterns", TestPattern,
 			"--header", "// my header",
 		})
 		assert.NoError(t, root.Execute())
@@ -75,7 +75,7 @@ func TestGenerateCmd(t *testing.T) {
 		root.SetArgs([]string{
 			"generate",
 			"--target", "foo",
-			"--pattern", TestPattern,
+			"--patterns", TestPattern,
 			"--file", filename,
 		})
 		assert.NoError(t, root.Execute())
@@ -86,7 +86,7 @@ func TestGenerateCmd(t *testing.T) {
 		root.SetArgs([]string{
 			"generate",
 			"--target", "foo",
-			"--pattern", TestPattern,
+			"--patterns", TestPattern,
 		})
 		assert.Error(t, root.Execute())
 		assert.Contains(t, buf.String(), "at least one of the flags in the group [file dry-run] is required")
@@ -96,10 +96,10 @@ func TestGenerateCmd(t *testing.T) {
 		root.SetArgs([]string{
 			"generate", "--dry-run",
 			"--target", "foo",
-			"--pattern", "golang.org/x/tools/go/*",
+			"--patterns", "golang.org/x/tools/go/*",
 		})
 		assert.Error(t, root.Execute())
-		assert.Contains(t, buf.String(), "aliaser: package errors:")
+		assert.Contains(t, buf.String(), "malformed import path \"golang.org/x/tools/go/*\"")
 	})
 }
 

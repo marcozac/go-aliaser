@@ -7,16 +7,8 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-var (
-	// ErrNilConfig is returned when the given config is nil.
-	ErrNilConfig = errors.New("nil config")
-
-	// ErrEmptyTarget is returned when the given target is empty.
-	ErrEmptyTarget = errors.New("empty target")
-
-	// ErrEmptyPattern is returned when the given pattern is empty.
-	ErrEmptyPattern = errors.New("empty pattern")
-)
+// ErrEmptyTarget is returned when the given target is empty.
+var ErrEmptyTarget = errors.New("empty target")
 
 // PackagesErrors is a slice of [packages.Error] as returned by
 // [packages.Load] that implements the error interface.

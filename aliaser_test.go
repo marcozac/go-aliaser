@@ -18,12 +18,41 @@ import (
 )
 
 func TestAliaser(t *testing.T) {
+	t.Run("Load", func(t *testing.T) {
+		a, err := New(Config{TargetPackage: TestTarget})
+		assert.NoError(t, err)
+		require.NotNil(t, a)
+
+		assert.NoError(t, a.Load(nil)) // no patterns: no-op
+		assert.Empty(t, a.Constants())
+		assert.Empty(t, a.Variables())
+		assert.Empty(t, a.Functions())
+		assert.Empty(t, a.Types())
+
+		assert.NoError(t, a.Load(nil, WithPatterns(TestPattern)))
+		assert.NotEmpty(t, a.Constants())
+		assert.NotEmpty(t, a.Variables())
+		assert.NotEmpty(t, a.Functions())
+		assert.NotEmpty(t, a.Types())
+
+		pkg := types.NewPackage("foo", "bar")
+		pkg.Scope().Insert(types.NewConst(0, pkg, "NewConst", types.Typ[types.Uint8], nil))
+		assert.NoError(t, a.addPackageObjects(&LoadConfig{}, pkg))
+		var found bool
+		for _, c := range a.Constants() {
+			if c.Name() == "NewConst" {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "NewConst not found")
+	})
 	t.Run("NotExportedObject", AliaserTest(func(t *testing.T, a *Aliaser) {
 		LoadedPackageHelper(t, func(t *testing.T, p *packages.Package) {
 			p.Types.Scope().Insert(
 				types.NewConst(0, p.Types, "notExported", types.Typ[types.Uint8], nil),
 			)
-			assert.NoError(t, a.addPkgObjects(p)) // cover not exported object
+			assert.NoError(t, a.addPackageObjects(&LoadConfig{}, p.Types)) // cover not exported object
 		})
 	}))
 }
@@ -32,7 +61,7 @@ func TestAliaserOptions(t *testing.T) {
 	t.Run("WithContext", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		_, err := New(&Config{TargetPackage: TestTarget, Pattern: TestPattern}, WithContext(ctx))
+		_, err := New(Config{TargetPackage: TestTarget}, WithPatterns(TestPattern), WithContext(ctx))
 		assert.Error(t, err)
 	})
 	t.Run("ExcludeConstants", AliaserTest(func(t *testing.T, a *Aliaser) {
@@ -124,30 +153,19 @@ func TestAliaserOptions(t *testing.T) {
 }
 
 func TestAliaserError(t *testing.T) {
-	// EmptyTarget and EmptyPattern are covered in the TestGenerate* tests
-	t.Run("NilConfig", func(t *testing.T) {
-		_, err := New(nil)
-		assert.ErrorIs(t, err, ErrNilConfig)
-	})
 	t.Run("InvalidPattern", func(t *testing.T) {
-		_, err := New(&Config{TargetPackage: TestTarget, Pattern: "golang.org/x/tools/go/*"})
-		assert.Error(t, err)
-	})
-	t.Run("TooManyPackages", func(t *testing.T) {
-		_, err := New(&Config{TargetPackage: TestTarget, Pattern: "golang.org/x/tools/go/..."})
+		_, err := New(Config{TargetPackage: TestTarget}, WithPatterns("golang.org/x/tools/go/*"))
 		assert.Error(t, err)
 	})
 	t.Run("Load", func(t *testing.T) {
 		t.Setenv("GOPACKAGESDRIVER", "fakedriver")
-		_, err := New(&Config{TargetPackage: TestTarget, Pattern: TestPattern})
+		_, err := New(Config{TargetPackage: TestTarget}, WithPatterns(TestPattern))
 		assert.Error(t, err)
 	})
 	t.Run("ObjectTypeError", AliaserTest(func(t *testing.T, a *Aliaser) {
 		LoadedPackageHelper(t, func(t *testing.T, p *packages.Package) {
-			p.Types.Scope().Insert(
-				types.NewLabel(0, p.Types, "MyLabel"),
-			)
-			assert.Error(t, a.addPkgObjects(p))
+			p.Types.Scope().Insert(types.NewLabel(0, p.Types, "MyLabel"))
+			assert.Error(t, a.addPackages(&LoadConfig{}, p.Types))
 		})
 	}))
 	t.Run("ParseTemplate", func(t *testing.T) {
@@ -181,7 +199,7 @@ func TestAliaserError(t *testing.T) {
 		})
 	}))
 	t.Run("addObjectName", AliaserTest(func(t *testing.T, a *Aliaser) {
-		a.onDuplicate = 10
+		a.OnDuplicate = 10
 		v := types.NewVar(0, a.variables[0].Pkg(), "A", types.Typ[types.Uint8])
 		assert.Panics(t, func() { a.addObjectName(v, 10) })
 	}))
@@ -217,7 +235,7 @@ func TestAliaserError(t *testing.T) {
 // and the options, then, it calls the given function.
 func AliaserTest(fn func(*testing.T, *Aliaser), opts ...Option) func(t *testing.T) {
 	return func(t *testing.T) {
-		a, err := New(&Config{TargetPackage: TestTarget, Pattern: TestPattern}, opts...)
+		a, err := New(Config{TargetPackage: TestTarget}, append(opts, WithPatterns(TestPattern))...)
 		assert.NoError(t, err)
 		require.NotNil(t, a)
 		fn(t, a)

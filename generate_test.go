@@ -22,17 +22,11 @@ func TestGenerateFile(t *testing.T) {
 	t.Run("EmptyTarget", func(t *testing.T) {
 		assert.ErrorIs(t, GenerateFile("", TestPattern, "alias.go"), ErrEmptyTarget)
 	})
-	t.Run("EmptyPattern", func(t *testing.T) {
-		assert.ErrorIs(t, GenerateFile(TestTarget, "", "alias.go"), ErrEmptyPattern)
-	})
 }
 
 func TestGenerate(t *testing.T) {
 	assert.NoError(t, Generate(TestTarget, TestPattern, io.Discard))
 	t.Run("EmptyTarget", func(t *testing.T) {
 		assert.ErrorIs(t, Generate("", TestPattern, io.Discard), ErrEmptyTarget)
-	})
-	t.Run("EmptyPattern", func(t *testing.T) {
-		assert.ErrorIs(t, Generate(TestTarget, "", io.Discard), ErrEmptyPattern)
 	})
 }
